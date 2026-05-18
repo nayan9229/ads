@@ -1,5 +1,12 @@
 node_modules/
-dist/
+# dist/ is intentionally tracked so jsDelivr can serve via /gh/ path on tag.
+# CI rebuilds + commits dist/ on every release. Only the bundled outputs are
+# tracked — TypeScript declaration trees + per-module artifacts stay ignored.
+dist/index.d.ts
+dist/core/
+dist/dom/
+dist/gates/
+dist/renderers/
 coverage/
 test-results/
 playwright-report/
