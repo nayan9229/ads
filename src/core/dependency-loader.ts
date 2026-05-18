@@ -1,12 +1,21 @@
 import { WrapperError, ErrorCode } from "./errors";
 
 export const DEFAULT_IMA_SRC = "https://imasdk.googleapis.com/js/sdkloader/ima3.js";
+export const DEFAULT_IDENTITY_RESOLVER_SRC =
+  "https://cdn.jsdelivr.net/gh/nayan9229/identity-resolver@1.0.8/dist/index.umd.js";
 
 export interface DependencyLoaderOptions {
   readonly prebidSrc: string;
   readonly imaSrc?: string;
+  readonly identityResolverSrc?: string;
   readonly timeoutMs: number;
   readonly nonce?: string;
+}
+
+export interface IdentityResolverGlobal {
+  resolveIdentitySignals: (...args: unknown[]) => unknown;
+  patchBidRequest?: (...args: unknown[]) => unknown;
+  [k: string]: unknown;
 }
 
 export interface PrebidGlobal {
@@ -26,8 +35,9 @@ export interface ImaGlobal {
 
 let preExistingPbjsWarned = false;
 let preExistingImaWarned = false;
+let preExistingIdentityResolverWarned = false;
 
-function warnReuse(scope: "pbjs" | "ima"): void {
+function warnReuse(scope: "pbjs" | "ima" | "identityResolver"): void {
   if (scope === "pbjs" && !preExistingPbjsWarned) {
     preExistingPbjsWarned = true;
     console.warn(
@@ -40,13 +50,83 @@ function warnReuse(scope: "pbjs" | "ima"): void {
       "[AdWrapper] reusing pre-existing window.google.ima — skipping IMA script injection.",
     );
   }
+  if (scope === "identityResolver" && !preExistingIdentityResolverWarned) {
+    preExistingIdentityResolverWarned = true;
+    console.warn(
+      "[AdWrapper] reusing pre-existing window.OpenRTBIdentityResolver — skipping identity-resolver script injection.",
+    );
+  }
 }
 
 export class DependencyLoader {
   private prebidPromise: Promise<PrebidGlobal> | null = null;
   private imaPromise: Promise<ImaGlobal> | null = null;
+  private identityResolverPromise: Promise<IdentityResolverGlobal> | null = null;
 
   constructor(private readonly opts: DependencyLoaderOptions) {}
+
+  loadIdentityResolver(): Promise<IdentityResolverGlobal> {
+    if (this.identityResolverPromise) return this.identityResolverPromise;
+
+    const existing = (window as unknown as { OpenRTBIdentityResolver?: IdentityResolverGlobal })
+      .OpenRTBIdentityResolver;
+    if (existing && typeof existing.resolveIdentitySignals === "function") {
+      warnReuse("identityResolver");
+      this.identityResolverPromise = Promise.resolve(existing);
+      return this.identityResolverPromise;
+    }
+
+    const src = this.opts.identityResolverSrc ?? DEFAULT_IDENTITY_RESOLVER_SRC;
+
+    this.identityResolverPromise = new Promise<IdentityResolverGlobal>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = src;
+      if (this.opts.nonce !== undefined) {
+        script.setAttribute("nonce", this.opts.nonce);
+      }
+
+      const timeout = window.setTimeout(() => {
+        reject(
+          new WrapperError(
+            ErrorCode.E_IDENTITY_LOAD_FAIL,
+            `identity-resolver load timed out after ${this.opts.timeoutMs}ms`,
+            { src },
+          ),
+        );
+      }, this.opts.timeoutMs);
+
+      script.onload = () => {
+        window.clearTimeout(timeout);
+        const g = (window as unknown as { OpenRTBIdentityResolver?: IdentityResolverGlobal })
+          .OpenRTBIdentityResolver;
+        if (!g || typeof g.resolveIdentitySignals !== "function") {
+          reject(
+            new WrapperError(
+              ErrorCode.E_IDENTITY_LOAD_FAIL,
+              "window.OpenRTBIdentityResolver missing after script load",
+              { src },
+            ),
+          );
+          return;
+        }
+        resolve(g);
+      };
+
+      script.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(
+          new WrapperError(ErrorCode.E_IDENTITY_LOAD_FAIL, "identity-resolver script onerror fired", {
+            src,
+          }),
+        );
+      };
+
+      document.head.appendChild(script);
+    });
+
+    return this.identityResolverPromise;
+  }
 
   loadIMA(): Promise<ImaGlobal> {
     if (this.imaPromise) return this.imaPromise;
@@ -169,4 +249,5 @@ export class DependencyLoader {
 export function _resetReuseWarnState(): void {
   preExistingPbjsWarned = false;
   preExistingImaWarned = false;
+  preExistingIdentityResolverWarned = false;
 }

@@ -1,10 +1,18 @@
 import { ValidatedSlotConfig } from "./config-registry";
 import { SlotLifecycle } from "./slot-lifecycle";
 import { resolveSizesForViewport } from "./resolve-sizes";
+import {
+  mergeIdentitySignals,
+  ResolverSignals,
+  ConsentSnapshot,
+  Ortb2Patch,
+  Eid,
+} from "./identity-signal-merger";
 
 export interface PrebidAuctionApi {
   addAdUnits(adUnits: ReadonlyArray<unknown>): void;
   removeAdUnit?(adUnitCode: string): void;
+  setConfig?(config: Record<string, unknown>): void;
   requestBids(args: { adUnitCodes: string[]; bidsBackHandler: (bids: unknown) => void }): void;
   getHighestCpmBids(adUnitCode: string): ReadonlyArray<{
     adId: string;
@@ -12,6 +20,14 @@ export interface PrebidAuctionApi {
     height: number;
   }>;
 }
+
+export interface SignalProviderOutput {
+  readonly resolverSignals: ResolverSignals | null;
+  readonly prebidEids: ReadonlyArray<Eid>;
+  readonly consent: ConsentSnapshot;
+}
+
+export type SignalProvider = () => Promise<SignalProviderOutput>;
 
 export interface PendingSlot {
   readonly slotId: string;
@@ -25,7 +41,10 @@ export class AuctionOrchestrator {
   private queue: PendingSlot[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly pbjs: PrebidAuctionApi) {}
+  constructor(
+    private readonly pbjs: PrebidAuctionApi,
+    private readonly signalProvider?: SignalProvider,
+  ) {}
 
   enqueue(slot: PendingSlot): void {
     this.queue.push(slot);
@@ -46,6 +65,23 @@ export class AuctionOrchestrator {
     if (this.queue.length === 0) return;
     const batch = this.queue;
     this.queue = [];
+
+    if (this.signalProvider) {
+      void this.signalProvider().then((signals) => this.runBatch(batch, signals));
+    } else {
+      this.runBatch(batch, null);
+    }
+  }
+
+  private runBatch(batch: PendingSlot[], signals: SignalProviderOutput | null): void {
+    if (signals && typeof this.pbjs.setConfig === "function") {
+      const patch: Ortb2Patch = mergeIdentitySignals({
+        resolver: signals.resolverSignals,
+        prebidEids: signals.prebidEids,
+        consent: signals.consent,
+      });
+      this.pbjs.setConfig({ ortb2: patch });
+    }
 
     const adUnits = batch.map((s) => {
       const bids = s.config.bidders.map((b) => ({

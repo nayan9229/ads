@@ -46,9 +46,9 @@
 
   <!--
       One script tag. Everything else — Prebid.js, Google IMA SDK, bidder
-      adapters — is loaded by sdk.js on demand. Publisher integration is:
+      adapters — is loaded by pubads.mini.js on demand. Publisher integration is:
 
-          <script src="./dist/sdk.js"></script>
+          <script src="./dist/pubads.mini.js"></script>
 
       Per CONTEXT D1: each ad slot is its own self-executing <script id="…">
       tag; per-slot config lives in window.AdWrapperConfig keyed by slot id.
@@ -62,12 +62,66 @@
       // prebidSrc: "https://prebid.adnxs.com/.../your-custom-build.js",
       consentDisabled: true,
       debug: true,
+
+      // Slice #0003/#0004: identity-resolver runtime. Loads identity-resolver
+      // UMD bundle from jsDelivr, resolves OpenRTB user.eids[] + user.buyeruid
+      // from 15+ vendor cookies, merges with Prebid userId modules, pushes via
+      // pbjs.setConfig({ ortb2 }) before each auction. Toggle to false for A/B.
+      identityResolver: {
+        enabled: true,
+        // src: "https://cdn.jsdelivr.net/gh/nayan9229/identity-resolver@1.0.0/dist/index.umd.js",
+        // timeoutMs: 1000,
+        // tiers: [1, 2, 3, 4],
+      },
+
+      // Slice #0005: IAB SupplyChain object. Required by TripleLift / Magnite /
+      // OpenX for trusted supply; some SSPs filter requests without it.
+      schain: {
+        ver: "1.0",
+        complete: 1,
+        nodes: [
+          { asi: "127.0.0.1:4173", sid: "demo-publisher", hp: 1, name: "AdWrapper Demo Page" },
+        ],
+      },
+
+      // Slice #0005: first-party site context. Prebid auto-derives site.domain
+      // + site.page — do NOT override those; let Prebid's defaults stand.
+      ortb2: {
+        site: {
+          cat: ["IAB12"],
+          content: {
+            keywords: "ad-tech, prebid, demo, identity, openrtb",
+            language: "en",
+          },
+        },
+      },
+
       prebidConfig: {
-        bidderTimeout: 1500,
-        priceGranularity: "dense",
+        bidderTimeout: 2500,
+        enableSendAllBids: true,
+        priceGranularity: "auto",
         cache: { useLocal: true },
         debug: true,
         enableTIDs: true,
+        // Prebid Price Floors Module — emits imp.bidfloor + imp.bidfloorcur
+        // into OpenRTB request for every bidder that respects the module.
+        // Requires Prebid build to include the `priceFloors` module.
+        floors: {
+          enforcement: { floorDeals: true, bidAdjustment: true },
+          data: {
+            currency: "USD",
+            modelVersion: "v1",
+            schema: { fields: ["mediaType"] },
+            values: {
+              banner: 0.5,
+              video: 1.0,
+            },
+          },
+        },
+        userSync: {
+          iframeEnabled: true,
+          syncsPerBidder: 5
+        },
         // any pbjs.setConfig key
       },
       retryDelaysMs: [],
@@ -92,9 +146,9 @@
 
     var BIDDERS = [
       // PubMatic — banner credentials
-      { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test" } },
+      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x250" } },
       // PubMatic — video credentials
-      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test" } },
+      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
       // Magnite — banner credentials
       // { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
       // // Magnite — video credentials
@@ -105,17 +159,57 @@
       //     siteId: 70608,
       //     zoneId: 498816,
       //     video: { playerWidth: 640, playerHeight: 480 },
+      //     floor: VIDEO_FLOOR_USD,
       //   },
       // },
-      { bidder: "appnexus", params: { publisherId: "10433394" } },
-      { bidder: "appnexus", params: { publisherId: "13232361" } },
-      { bidder: '33across', params: { zoneId: 'examplePub123', productId: 'instream' } },
+      // { bidder: "appnexus", params: { placementId: "10433394", reserve: BANNER_FLOOR_USD } },
+      // { bidder: "appnexus", params: { placementId: "13144370", reserve: BANNER_FLOOR_USD } },
+      { bidder: "yahoossp", params: { dcn: "8a9698a0173a50f70175f6b6695d00",pos: '300x600_top' } },
     ];
+
+    // var BIDDERS = [
+    //   { bidder: "appnexus", params: { placementId: 13144370 } }, // Xandr / AppNexus Banner
+    //   { bidder: "appnexus", params: { placementId: 13232385 } }, // Xandr / AppNexus Video
+
+    //   { bidder: "rubicon", params: { accountId: 1001, siteId: 113932, zoneId: 535510 } }, // Rubicon / Magnite Banner
+    //   { bidder: "rubicon", params: { accountId: 1001, siteId: 214196, zoneId: 1138998 } }, // Rubicon / Magnite Video
+
+    //   { bidder: "pubmatic", params: { publisherId: "156209", adSlot: "pubmatic_test" } }, // PubMatic Banner
+    //   { bidder: "pubmatic", params: { publisherId: "156209", adSlot: "pubmatic_video_test" } }, // PubMatic Video
+
+    //   { bidder: "openx", params: { unit: "540249251", delDomain: "openx-d.openx.net" } }, // OpenX Banner
+    //   { bidder: "openx", params: { unit: "540249251", delDomain: "openx-d.openx.net" } }, // OpenX Video
+
+    //   { bidder: "ix", params: { siteId: "1" } }, // Index Exchange Banner
+    //   { bidder: "ix", params: { siteId: "2" } }, // Index Exchange Video
+
+    //   { bidder: "sovrn", params: { tagid: "315045" } }, // Sovrn Banner
+    //   { bidder: "sovrn", params: { tagid: "315045" } }, // Sovrn Video
+
+    //   { bidder: "triplelift", params: { inventoryCode: "demo" } }, // TripleLift Banner
+    //   { bidder: "triplelift", params: { inventoryCode: "demo" } }, // TripleLift Native / Video-like
+
+    //   { bidder: "criteo", params: { networkId: 7100, publisherSubId: "test" } }, // Criteo
+
+    //   { bidder: "medianet", params: { cid: "8CU1Y5T3H", crid: "734962" } }, // Media.net
+
+    //   { bidder: "sharethrough", params: { pkey: "JHskrFKx4M4j5bXQ" } }, // Sharethrough
+
+    //   { bidder: "teads", params: { placementId: 107438 } }, // Teads Outstream
+
+    //   { bidder: "yahoossp", params: { dcn: "8a9698a0173a50f70175f6b6695d00" } }, // Yahoo / Verizon
+
+    //   { bidder: "smartadserver", params: { siteId: 123456, pageId: 1234567, formatId: 12345 } }, // Smart AdServer
+
+    //   { bidder: "adkernel", params: { host: "cpm.metaadserving.com", zoneId: 30164 } }, // AdKernel
+
+    //   { bidder: "bidmachine", params: { sellerId: "1" } } // BidMachine
+    // ];
 
     window.AdWrapperConfig = {
       slot_300x250: {
         mediaTypes: {
-          banner: { sizes: [[300, 250]] },
+          banner: { sizes: [[300, 250]] }, 
           video: VIDEO_PROFILE,
         },
         bidders: BIDDERS,
@@ -130,6 +224,8 @@
         eager: true,
       },
     };
+
+
   </script>
 </head>
 
@@ -144,12 +240,12 @@
   <div class="ad-row">
     <div class="ad-card">
       <h3>Slot A — slot_300x250 (mixed)</h3>
-      <script id="slot_300x250" src="../dist/sdk.js"></script>
+      <script id="slot_300x250" src="../dist/pubads.mini.js"></script>
     </div>
 
     <div class="ad-card">
       <h3>Slot B — slot_300x600 (mixed)</h3>
-      <script id="slot_300x600" src="../dist/sdk.js"></script>
+      <script id="slot_300x600" src="../dist/pubads.mini.js"></script>
     </div>
   </div>
 

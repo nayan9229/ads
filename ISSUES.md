@@ -63,7 +63,7 @@ Skeleton modules created to satisfy the integration tracer (further behaviors li
 
 ### Infrastructure shipped alongside the tracer
 
-- **Build**: Rollup 4 IIFE bundle → `dist/sdk.js` (2.3 KB gz). Terser at `ecma: 2017`. External source map. `npm run build:check` chains build + size assertion.
+- **Build**: Rollup 4 IIFE bundle → `dist/pubads.mini.js` (2.3 KB gz). Terser at `ecma: 2017`. External source map. `npm run build:check` chains build + size assertion.
 - **Tests**: Jest 29 + jsdom, ts-jest transformer. `jest.config.cjs` clears mocks between tests. 22 specs across 7 files.
 - **E2E**: Playwright 1.60 with Chromium. `playwright.config.ts` spawns `http-server` on port 4173. Spec lives at `e2e/banner-happy.spec.ts`.
 - **Lint**: ESLint 10 flat config (`eslint.config.js`) extending `@eslint/js/recommended` + `typescript-eslint/recommended`. `no-eval` and `no-new-func` set to `error` (satisfies CSP-no-eval requirement from D27, ahead of issue #18).
@@ -746,8 +746,8 @@ End-to-end release pipeline matching D22-revised and D36:
 ### Acceptance criteria
 
 - [ ] Merging a `feat:` commit to `main` triggers `semantic-release` and publishes a new minor version to GitHub Packages.
-- [ ] Published package resolvable at `https://cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/sdk.js`.
-- [ ] Floating URL `@nayan9229/ads@1/dist/sdk.js` serves the latest 1.x within minutes of release (after cache purge).
+- [ ] Published package resolvable at `https://cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/pubads.mini.js`.
+- [ ] Floating URL `@nayan9229/ads@1/dist/pubads.mini.js` serves the latest 1.x within minutes of release (after cache purge).
 - [ ] GitHub Release notes contain SRI hash matching the published bundle.
 - [ ] `vX.Y.Z-rc.1` tag publishes to GitHub Packages with `dist-tag: rc`, accessible at pinned URL only; floating URL unchanged.
 - [ ] `docs/rollback.md` documents the deprecate + redirect steps.

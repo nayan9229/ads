@@ -6,7 +6,7 @@ How `@nayan9229/ads` versions ship.
 
 | Channel          | Branch | Tag           | Floating URL                                        | When to use                            |
 | ---------------- | ------ | ------------- | --------------------------------------------------- | -------------------------------------- |
-| Stable           | `main` | `vX.Y.Z`      | `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js` | Default for publishers                 |
+| Stable           | `main` | `vX.Y.Z`      | `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js` | Default for publishers                 |
 | Pre-release / RC | `rc`   | `vX.Y.Z-rc.N` | _no floating URL_ — pinned only                     | Canary soak before promoting to stable |
 
 ---
@@ -22,8 +22,8 @@ How `@nayan9229/ads` versions ship.
    - `semantic-release` cuts the version, updates `CHANGELOG.md`, tags `vX.Y.Z`, publishes to GitHub Packages, creates a GitHub Release with `dist/` assets and SRI in body
    - Purges jsDelivr cache for the floating `@1` URL
 3. Within ~5 min the new version is available at:
-   - `cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/sdk.js` (pinned)
-   - `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js` (floating)
+   - `cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/pubads.mini.js` (pinned)
+   - `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js` (floating)
 
 Commit messages that do not match the release rules in `.releaserc.json` (e.g. `chore:`, `test:`, `ci:`) skip release.
 
@@ -53,7 +53,7 @@ git push origin rc
 Consumers explicitly install:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z-rc.1/dist/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z-rc.1/dist/pubads.mini.js"></script>
 ```
 
 ### Step 3 — 7-day soak

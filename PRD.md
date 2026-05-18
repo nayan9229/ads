@@ -13,7 +13,7 @@ Trafficking teams need a way to ship a new ad slot without engineering involveme
 A drop-in JavaScript SDK distributed as a single IIFE bundle (≤ 30 KB gzipped, ES2017) via GitHub Packages and jsDelivr. Publishers integrate one ad slot by:
 
 1. Defining a per-slot config entry on `window.AdWrapperConfig` keyed by slot ID.
-2. Pasting a single `<script id="{slot_id}" src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js"></script>` tag where the ad should appear.
+2. Pasting a single `<script id="{slot_id}" src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js"></script>` tag where the ad should appear.
 
 The SDK auto-detects the script tag (`document.currentScript`), injects a sibling container at the reserved size, loads Prebid.js (hosted custom-build with locked bidder set: AppNexus, Rubicon, IX, OpenX, PubMatic, TripleLift) and Google IMA SDK in parallel, resolves consent via publisher-supplied CMP, runs a batched multi-slot auction with 50 ms debounce, selects the highest-CPM winner, and renders the creative format-appropriately. Lazy loading, viewability tracking, exponential-backoff retry on no-fill, viewability-gated time-based refresh, identity propagation, and SPA-aware destroy/re-init are built in. Lifecycle callbacks plus an optional `sendBeacon` analytics endpoint expose telemetry. No GAM, no ad-server line items, no S2S, no SDK-owned backend. Apache 2.0.
 

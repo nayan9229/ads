@@ -54,10 +54,10 @@
       "@semantic-release/github",
       {
         "assets": [
-          { "path": "dist/sdk.js", "label": "sdk.js (IIFE)" },
-          { "path": "dist/sdk.js.map", "label": "sdk.js sourcemap" },
-          { "path": "dist/sdk.esm.js", "label": "sdk.esm.js (ESM)" },
-          { "path": "dist/sdk.esm.js.map", "label": "sdk.esm.js sourcemap" },
+          { "path": "dist/pubads.mini.js", "label": "pubads.mini.js (IIFE)" },
+          { "path": "dist/pubads.mini.js.map", "label": "pubads.mini.js sourcemap" },
+          { "path": "dist/pubads.mini.esm.js", "label": "pubads.mini.esm.js (ESM)" },
+          { "path": "dist/pubads.mini.esm.js.map", "label": "pubads.mini.esm.js sourcemap" },
           { "path": "dist/sri.txt", "label": "SRI hashes" }
         ],
         "successComment": false,

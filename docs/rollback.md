@@ -4,7 +4,7 @@ How to roll back a bad `@nayan9229/ads` release.
 
 ## Principle
 
-**Pinned URLs are immutable.** A published version on GitHub Packages and the corresponding `cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/sdk.js` URL must never serve different bytes than the original publish. Rollback works by redirecting the **floating** URL (`@1`, `@1.x`) to a known-good prior version, then deprecating the bad one.
+**Pinned URLs are immutable.** A published version on GitHub Packages and the corresponding `cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/pubads.mini.js` URL must never serve different bytes than the original publish. Rollback works by redirecting the **floating** URL (`@1`, `@1.x`) to a known-good prior version, then deprecating the bad one.
 
 ---
 
@@ -58,7 +58,7 @@ npm dist-tag add @nayan9229/ads@A.B.C latest --registry=https://npm.pkg.github.c
 ### 4. Purge jsDelivr cache for the floating URL
 
 ```sh
-curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js"
+curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js"
 ```
 
 (`https://purge.jsdelivr.net/...` is the API form documented at https://www.jsdelivr.com/tools/purge.) Purge clears the floating-URL cache; pinned-version URLs are unaffected.
@@ -66,7 +66,7 @@ curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js"
 ### 5. Verify
 
 ```sh
-curl -sI "https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js" | grep -i etag
+curl -sI "https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js" | grep -i etag
 ```
 
 ETag should match the rolled-back version's bundle hash. Cross-check with the SRI hash recorded in the release notes for `vA.B.C`.

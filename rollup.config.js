@@ -22,7 +22,7 @@ export default [
   {
     input: "src/index.ts",
     output: {
-      file: "dist/sdk.js",
+      file: "dist/pubads.mini.js",
       format: "iife",
       name: "AdWrapperBundle",
       sourcemap: true,
@@ -32,7 +32,7 @@ export default [
   {
     input: "src/index.ts",
     output: {
-      file: "dist/sdk.esm.js",
+      file: "dist/pubads.mini.esm.js",
       format: "esm",
       sourcemap: true,
     },

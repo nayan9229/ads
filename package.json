@@ -1,23 +1,23 @@
 {
   "name": "@nayan9229/ads",
-  "version": "0.0.0-development",
+  "version": "1.0.1",
   "description": "Prebid.js wrapper SDK — self-executing script tag, batched auction, banner / outstream / native.",
   "type": "module",
-  "main": "dist/sdk.js",
-  "module": "dist/sdk.esm.js",
+  "main": "dist/pubads.mini.js",
+  "module": "dist/pubads.mini.esm.js",
   "exports": {
     ".": {
-      "import": "./dist/sdk.esm.js",
-      "default": "./dist/sdk.js"
+      "import": "./dist/pubads.mini.esm.js",
+      "default": "./dist/pubads.mini.js"
     },
-    "./dist/sdk.js": "./dist/sdk.js",
-    "./dist/sdk.esm.js": "./dist/sdk.esm.js"
+    "./dist/pubads.mini.js": "./dist/pubads.mini.js",
+    "./dist/pubads.mini.esm.js": "./dist/pubads.mini.esm.js"
   },
   "files": [
-    "dist/sdk.js",
-    "dist/sdk.js.map",
-    "dist/sdk.esm.js",
-    "dist/sdk.esm.js.map",
+    "dist/pubads.mini.js",
+    "dist/pubads.mini.js.map",
+    "dist/pubads.mini.esm.js",
+    "dist/pubads.mini.esm.js.map",
     "dist/sri.txt",
     "CHANGELOG.md",
     "LICENSE",

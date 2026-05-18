@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
-const BUNDLES = ["dist/sdk.js", "dist/sdk.esm.js"];
+const BUNDLES = ["dist/pubads.mini.js", "dist/pubads.mini.esm.js"];
 const ALGO = "sha384";
 
 const lines = ["# Subresource Integrity hashes", ""];

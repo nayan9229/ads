@@ -21,11 +21,41 @@ import { Environment, detectEnvironment } from "./detect-environment";
 
 export const DEFAULT_RETRY_DELAYS_MS: ReadonlyArray<number> = [1000, 2000, 4000, 8000, 16000];
 
+export interface SupplyChainNode {
+  readonly asi: string;
+  readonly sid: string;
+  readonly hp: 0 | 1;
+  readonly rid?: string;
+  readonly name?: string;
+  readonly domain?: string;
+}
+
+export interface SupplyChainObject {
+  readonly ver: "1.0";
+  readonly complete: 0 | 1;
+  readonly nodes: ReadonlyArray<SupplyChainNode>;
+}
+
+export interface IdentityResolverConfig {
+  readonly enabled: boolean;
+  readonly src?: string;
+  readonly version?: string;
+  readonly deviceIdCookieName?: string;
+  readonly tiers?: ReadonlyArray<1 | 2 | 3 | 4>;
+  readonly timeoutMs?: number;
+}
+
 export interface BootstrapOptions {
   readonly prebidSrc: string;
   readonly timeoutMs?: number;
   readonly prebidLoaderOverride?: () => Promise<PrebidGlobal>;
   readonly imaLoaderOverride?: () => Promise<import("./dependency-loader").ImaGlobal>;
+  readonly identityResolverLoaderOverride?: () => Promise<
+    import("./dependency-loader").IdentityResolverGlobal
+  >;
+  readonly identityResolver?: IdentityResolverConfig;
+  readonly schain?: SupplyChainObject;
+  readonly ortb2?: Record<string, unknown>;
   readonly retryDelaysMs?: ReadonlyArray<number>;
   readonly consentTimeoutMs?: number;
   readonly consentTimezone?: string;
@@ -90,9 +120,43 @@ export interface PublicApi {
 
 type FullPbjs = PrebidGlobal & PrebidAuctionApi & { renderAd(doc: Document, adId: string): void };
 
+function validateSchain(raw: SupplyChainObject): void {
+  if (raw.ver !== "1.0") {
+    throw new ConfigError("`schain.ver` must be \"1.0\"", { field: "schain.ver", value: raw.ver });
+  }
+  if (raw.complete !== 0 && raw.complete !== 1) {
+    throw new ConfigError("`schain.complete` must be 0 or 1", {
+      field: "schain.complete",
+      value: raw.complete,
+    });
+  }
+  if (!Array.isArray(raw.nodes) || raw.nodes.length === 0) {
+    throw new ConfigError("`schain.nodes` must be a non-empty array", { field: "schain.nodes" });
+  }
+  raw.nodes.forEach((n, i) => {
+    if (typeof n.asi !== "string" || n.asi.length === 0) {
+      throw new ConfigError(`\`schain.nodes[${i}].asi\` must be a non-empty string`, {
+        field: `schain.nodes[${i}].asi`,
+      });
+    }
+    if (typeof n.sid !== "string" || n.sid.length === 0) {
+      throw new ConfigError(`\`schain.nodes[${i}].sid\` must be a non-empty string`, {
+        field: `schain.nodes[${i}].sid`,
+      });
+    }
+    if (n.hp !== 0 && n.hp !== 1) {
+      throw new ConfigError(`\`schain.nodes[${i}].hp\` must be 0 or 1`, {
+        field: `schain.nodes[${i}].hp`,
+      });
+    }
+  });
+}
+
 export function bootstrap(opts: BootstrapOptions): PublicApi {
   const existing = (window as unknown as { AdWrapper?: PublicApi }).AdWrapper;
   if (existing) return existing;
+
+  if (opts.schain !== undefined) validateSchain(opts.schain);
 
   const errors = new ErrorRegistry();
   const callbacks = new CallbackRegistry(errors);
@@ -156,6 +220,34 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
     void ensureImaPreload();
   }
 
+  // identityResolver runtime preload — parallel with Prebid + IMA (D43-style sniff).
+  // Banner-only pages with identityResolver disabled pay zero bytes.
+  let identityReadyPromise: Promise<import("./dependency-loader").IdentityResolverGlobal | null> | null =
+    null;
+  function ensureIdentityResolverPreload(): Promise<
+    import("./dependency-loader").IdentityResolverGlobal | null
+  > {
+    if (identityReadyPromise) return identityReadyPromise;
+    const load =
+      opts.identityResolverLoaderOverride ?? (() => loader.loadIdentityResolver());
+    identityReadyPromise = load().catch((err: unknown) => {
+      callbacks.emit("error", {
+        code: "E_IDENTITY_LOAD_FAIL",
+        message: err instanceof Error ? err.message : "identity-resolver load failed",
+      });
+      return null;
+    });
+    return identityReadyPromise;
+  }
+
+  if (
+    typeof window !== "undefined" &&
+    opts.identityResolver?.enabled === true &&
+    resolveEnvironment(opts.environment) !== "webview"
+  ) {
+    void ensureIdentityResolverPreload();
+  }
+
   let cspLogger: CspViolationLogger | null = null;
   if (opts.debug === true) {
     cspLogger = new CspViolationLogger();
@@ -189,6 +281,38 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
   const identityResolver =
     opts.identity && environment !== "webview" ? new IdentityResolver(opts.identity) : null;
 
+  const sharedConsentManager: ConsentManager | null = opts.consentDisabled
+    ? null
+    : new ConsentManager({
+        timeoutMs: opts.consentTimeoutMs ?? 1000,
+        ...(opts.consentTimezone ? { timezone: opts.consentTimezone } : {}),
+      });
+
+  function buildSignalProvider(): import("./auction-orchestrator").SignalProvider {
+    return async () => {
+      const runtime = await ensureIdentityResolverPreload();
+      let resolverSignals: import("./identity-signal-merger").ResolverSignals | null = null;
+      if (runtime) {
+        try {
+          resolverSignals =
+            (runtime.resolveIdentitySignals() as import("./identity-signal-merger").ResolverSignals) ??
+            null;
+        } catch {
+          resolverSignals = null;
+        }
+      }
+      const consentState = sharedConsentManager ? await sharedConsentManager.resolve() : null;
+      const blocked = consentState?.blocked === true;
+      const consent: import("./identity-signal-merger").ConsentSnapshot = {
+        blocked,
+        tcfApplies: !!consentState?.tcString,
+        ...(consentState?.tcString !== undefined ? { tcString: consentState.tcString } : {}),
+        ...(consentState?.uspString !== undefined ? { uspString: consentState.uspString } : {}),
+      };
+      return { resolverSignals, prebidEids: [], consent };
+    };
+  }
+
   // Defer environment_detected emit so callers can subscribe after bootstrap returns.
   Promise.resolve().then(() => {
     callbacks.emit("environment_detected", { environment });
@@ -197,7 +321,10 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
   async function getPbjs(): Promise<FullPbjs> {
     if (pbjsCached) return pbjsCached;
     pbjsCached = (await loadPrebid()) as FullPbjs;
-    orchestrator = new AuctionOrchestrator(pbjsCached);
+    orchestrator = new AuctionOrchestrator(
+      pbjsCached,
+      opts.identityResolver?.enabled === true ? buildSignalProvider() : undefined,
+    );
     const setConfig = (pbjsCached as unknown as SetConfigCapable).setConfig;
     if (typeof setConfig === "function") {
       if (opts.prebidConfig && Object.keys(opts.prebidConfig).length > 0) {
@@ -205,6 +332,12 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       }
       if (opts.debug === true) {
         setConfig.call(pbjsCached, { debug: true });
+      }
+      if (opts.schain) {
+        setConfig.call(pbjsCached, { schain: opts.schain });
+      }
+      if (opts.ortb2 && Object.keys(opts.ortb2).length > 0) {
+        setConfig.call(pbjsCached, { ortb2: opts.ortb2 });
       }
       if (identityResolver) {
         const userIds = identityResolver.buildUserIdsConfig({ blocked: false });
@@ -286,14 +419,7 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
         isInView: () => true,
         lazyLoadGate: new LazyLoadGate(),
         viewabilityTracker: new ViewabilityTracker(),
-        ...(opts.consentDisabled
-          ? {}
-          : {
-              consentManager: new ConsentManager({
-                timeoutMs: opts.consentTimeoutMs ?? 1000,
-                ...(opts.consentTimezone ? { timezone: opts.consentTimezone } : {}),
-              }),
-            }),
+        ...(sharedConsentManager ? { consentManager: sharedConsentManager } : {}),
         ...(currencyConverter ? { currencyConverter } : {}),
         ...(environment === "webview" ? { suppressRefresh: true } : {}),
       });

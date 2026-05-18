@@ -26,7 +26,7 @@ Prebid.js wrapper SDK. Drop one `<script>` per slot. SDK auto-load Prebid.js + I
 
     <script
       id="homepage_300x250_top"
-      src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js"
+      src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js"
     ></script>
 
     <article>Content below the ad.</article>
@@ -56,7 +56,7 @@ Prebid.js wrapper SDK. Drop one `<script>` per slot. SDK auto-load Prebid.js + I
 
 ## Global SDK options — `window.AdWrapperOptions`
 
-Single object. Applies to all slots. Set BEFORE the first `<script src="sdk.js">` tag.
+Single object. Applies to all slots. Set BEFORE the first `<script src="pubads.mini.js">` tag.
 
 ```js
 window.AdWrapperOptions = {
@@ -122,6 +122,40 @@ window.AdWrapperOptions = {
 
   environment: "auto",
   //   "auto" | "browser" | "webview". Default: auto-detect from UA.
+
+  // === Identity-resolver runtime (augments Prebid userId modules) ===
+  identityResolver: {
+    enabled: true,
+    src: "https://cdn.jsdelivr.net/gh/nayan9229/identity-resolver@1.0.0/dist/index.umd.js",
+    timeoutMs: 1000,
+    tiers: [1, 2, 3, 4],
+  },
+  //   Loads identity-resolver UMD on demand, resolves OpenRTB user.eids[] +
+  //   user.buyeruid from 15+ vendor cookies, merges with Prebid userId modules,
+  //   pushes via pbjs.setConfig({ ortb2 }) pre-auction. ConsentManager-aware:
+  //   eids+buyeruid stripped when consent blocked, regs.* always forwarded.
+  //   Default src = jsDelivr GitHub pin. webview env always skips.
+
+  // === IAB SupplyChain (schain) ===
+  schain: {
+    ver: "1.0",
+    complete: 1,
+    nodes: [{ asi: "your-domain.com", sid: "your-publisher-id", hp: 1 }],
+  },
+  //   Forwarded verbatim via pbjs.setConfig({ schain }). Many SSPs filter
+  //   requests without it. Validated at bootstrap: ver must be "1.0",
+  //   complete must be 0|1, nodes[] non-empty, each node needs asi/sid/hp.
+
+  // === First-party site context ===
+  ortb2: {
+    site: {
+      cat: ["IAB12"],
+      content: { keywords: "ad-tech, prebid", language: "en" },
+    },
+  },
+  //   Verbatim passthrough to pbjs.setConfig({ ortb2 }). Prebid auto-derives
+  //   site.domain + site.page — do NOT override those keys. Loose typed
+  //   (Record<string, unknown>); SDK does not validate inner shape.
 };
 ```
 
@@ -224,7 +258,7 @@ Reserved size = max banner size. Video constrained to that area.
 
 ## Public API — `window.AdWrapper`
 
-Available after first `<script src="sdk.js">` execute.
+Available after first `<script src="pubads.mini.js">` execute.
 
 ```js
 // Subscribe events
@@ -257,6 +291,12 @@ Payloads include `slotId`. Render events also include `adId`, `size`, `cpm`, `cu
 | `currency.ttlMs` | `86_400_000` (24h) |
 | `environment` | `"auto"` |
 | `prebidSrc` | `cdn.jsdelivr.net/npm/prebid.js@latest/dist/not-for-prod/prebid.js` (with warn) |
+| `identityResolver` | absent — runtime not loaded (zero bytes) |
+| `identityResolver.src` | `cdn.jsdelivr.net/gh/nayan9229/identity-resolver@1.0.0/dist/index.umd.js` |
+| `identityResolver.timeoutMs` | `1000` ms |
+| `identityResolver.tiers` | `[1, 2, 3, 4]` (all tiers) |
+| `schain` | absent — no `pbjs.setConfig({ schain })` call |
+| `ortb2` | absent — no first-party passthrough |
 | Bundle size cap | 30 KB gzipped |
 
 ---
@@ -267,7 +307,7 @@ Payloads include `slotId`. Render events also include `adId`, `size`, `cpm`, `cu
 npm install
 npm test          # Jest — 153 tests, 37 suites
 npm run typecheck # tsc --noEmit
-npm run build     # Rollup IIFE → dist/sdk.js
+npm run build     # Rollup IIFE → dist/pubads.mini.js
 npm run size      # Gzipped bundle cap check (30 KB)
 npm run e2e       # Playwright smoke on demo page
 npm run lint

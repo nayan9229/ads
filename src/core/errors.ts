@@ -7,6 +7,7 @@ export const ErrorCode = {
   E_RENDER_TIMEOUT: "E_RENDER_TIMEOUT",
   E_PREBID_LOAD_FAIL: "E_PREBID_LOAD_FAIL",
   E_IMA_LOAD_FAIL: "E_IMA_LOAD_FAIL",
+  E_IDENTITY_LOAD_FAIL: "E_IDENTITY_LOAD_FAIL",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

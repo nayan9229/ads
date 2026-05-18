@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 
 const MAX_GZ_BYTES = 30 * 1024;
-const BUNDLE = "dist/sdk.js";
+const BUNDLE = "dist/pubads.mini.js";
 
 const raw = readFileSync(BUNDLE);
 const gz = gzipSync(raw, { level: 9 });
