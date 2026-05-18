@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — single banner</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .panel {
+        background: #fafafa;
+        border: 1px solid #ddd;
+        padding: 16px;
+        margin: 16px 0;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 200px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+    </style>
+    <script>
+      window.AdWrapperConfig = {
+        homepage_300x250_top: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+        },
+      };
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>AdWrapper SDK Demo</h1>
+    <p>This page exercises Issue #1: a single 300x250 banner slot via mock bid adapter.</p>
+
+    <div class="panel">
+      <strong>Above the ad</strong>
+      <p>Content that comes before the ad slot.</p>
+    </div>
+
+    <script id="homepage_300x250_top" src="../dist/sdk.js"></script>
+
+    <div class="panel">
+      <strong>Below the ad</strong>
+      <p>Content that comes after the ad slot.</p>
+    </div>
+
+    <h2>Events</h2>
+    <pre class="events" id="events"></pre>
+
+    <script>
+      var out = document.getElementById("events");
+      function logEvent(name) {
+        return function (payload) {
+          out.textContent +=
+            "[" + new Date().toISOString().slice(11, 23) + "] " +
+            name +
+            " " +
+            JSON.stringify(payload) +
+            "\n";
+        };
+      }
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        [
+          "adRenderSuccess",
+          "adRenderFail",
+          "noFill",
+          "error",
+        ].forEach(function (e) {
+          window.AdWrapper.on(e, logEvent(e));
+        });
+      }
+      attach();
+    </script>
+  </body>
+</html>

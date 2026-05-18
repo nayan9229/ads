@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — F5 no-fill exponential retry</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 240px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+    </style>
+    <script>
+      window.MOCK_BIDDER_SCENARIO = "no-fill";
+      window.AdWrapperOptions = {
+        retryDelaysMs: [50, 100, 200, 400, 800],
+      };
+      window.AdWrapperConfig = {
+        slot_nofill: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+        },
+      };
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>F5: no-fill exponential retry</h1>
+    <p>Mock bidder returns no bid. SDK retries 5 times then leaves a blank reserved container.</p>
+
+    <script id="slot_nofill" src="../dist/sdk.js"></script>
+
+    <h2>Events</h2>
+    <pre class="events" id="events"></pre>
+    <h2>Auction calls</h2>
+    <pre class="events" id="calls"></pre>
+
+    <script>
+      var eventsOut = document.getElementById("events");
+      var callsOut = document.getElementById("calls");
+      function logEvent(name) {
+        return function (payload) {
+          eventsOut.textContent +=
+            "[" + new Date().toISOString().slice(11, 23) + "] " +
+            name +
+            " " +
+            JSON.stringify(payload) +
+            "\n";
+        };
+      }
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        ["adRenderSuccess", "adRenderFail", "noFill", "error"].forEach(function (e) {
+          window.AdWrapper.on(e, logEvent(e));
+        });
+      }
+      attach();
+
+      setInterval(function () {
+        callsOut.textContent = JSON.stringify(window.MOCK_PBJS_CALLS, null, 2);
+      }, 100);
+    </script>
+  </body>
+</html>

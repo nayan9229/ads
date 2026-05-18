@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — F3 native</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 200px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+      .card {
+        border: 1px solid #ccc;
+        padding: 16px;
+        max-width: 360px;
+        font-family: system-ui, sans-serif;
+      }
+      .card h3 {
+        margin: 8px 0 4px;
+      }
+      .card .sponsor {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+    </style>
+    <script>
+      window.MOCK_NATIVE_BIDS = {
+        slot_native: {
+          title: "<script>window.__xss=true<\/script>Hello",
+          body: "Native ad body text.",
+          cta: "Buy now",
+          sponsoredBy: "DemoCo",
+          image: { url: "https://placehold.co/360x180/036/fff?text=Native" },
+          clickUrl: "https://example.com/landing",
+          clickTrackers: [],
+          impressionTrackers: [],
+        },
+      };
+
+      window.AdWrapperConfig = {
+        slot_native: {
+          mediaTypes: {
+            native: {
+              requiredAssets: ["title"],
+              template:
+                '<div class="card"><h3 class="title">{{title}}</h3>' +
+                '<p class="body">{{body}}</p>' +
+                '<span class="sponsor">by {{sponsoredBy}}</span>' +
+                '<button class="cta">{{cta}}</button></div>',
+            },
+          },
+          bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+          eager: true,
+        },
+      };
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>F3: native ad</h1>
+    <p>Mock native bid renders the card template below. Malicious script must NOT execute.</p>
+
+    <script id="slot_native" src="../dist/sdk.js"></script>
+
+    <h2>Events</h2>
+    <pre class="events" id="events"></pre>
+
+    <script>
+      var eventsOut = document.getElementById("events");
+      function logEvent(name) {
+        return function (payload) {
+          eventsOut.textContent +=
+            "[" + new Date().toISOString().slice(11, 23) + "] " +
+            name +
+            " " +
+            JSON.stringify(payload) +
+            "\n";
+        };
+      }
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        ["adRenderSuccess", "adRenderFail", "noFill", "error"].forEach(function (e) {
+          window.AdWrapper.on(e, logEvent(e));
+        });
+      }
+      attach();
+    </script>
+  </body>
+</html>

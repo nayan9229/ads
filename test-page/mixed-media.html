@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mixed Banner + Video — AdWrapper SDK</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 1024px;
+      margin: 32px auto;
+      padding: 0 20px;
+      color: #111;
+    }
+
+    .ad-row {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin: 24px 0;
+    }
+
+    .ad-card {
+      border: 1px dashed #888;
+      padding: 12px;
+      background: #fafafa;
+    }
+
+    .ad-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    pre.log {
+      background: #111;
+      color: #6f6;
+      padding: 10px;
+      font-size: 11px;
+      max-height: 320px;
+      overflow: auto;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+
+  <!--
+      One script tag. Everything else — Prebid.js, Google IMA SDK, bidder
+      adapters — is loaded by sdk.js on demand. Publisher integration is:
+
+          <script src="./dist/sdk.js"></script>
+
+      Per CONTEXT D1: each ad slot is its own self-executing <script id="…">
+      tag; per-slot config lives in window.AdWrapperConfig keyed by slot id.
+    -->
+  <script>
+    // SDK options apply to all slots. `prebidSrc` should point at a Prebid
+    // hosted custom build with the bidders you need (CONTEXT D7). Default
+    // falls back to `not-for-prod` with a console.warn (CONTEXT D44).
+    window.AdWrapperOptions = {
+      // Uncomment to override with your hosted Prebid build:
+      // prebidSrc: "https://prebid.adnxs.com/.../your-custom-build.js",
+      consentDisabled: true,
+      debug: true,
+      prebidConfig: {
+        bidderTimeout: 1500,
+        priceGranularity: "dense",
+        cache: { useLocal: true },
+        debug: true,
+        enableTIDs: true,
+        // any pbjs.setConfig key
+      },
+      retryDelaysMs: [],
+    };
+
+    // Real-bidder credentials. Bidder param shape mirrors Prebid adapter docs.
+    // PubMatic banner publisherId (12345) vs video publisherId (156269) differ,
+    // so each PubMatic mediaType lands in its own bid entry.
+    // Same for Magnite (rubicon adapter).
+    var VIDEO_PROFILE = {
+      context: "instream", // or 'outstream'
+      playerSize: [640, 480],
+      mimes: ["video/mp4", "application/javascript"],
+      protocols: [1, 2, 3, 4, 5, 6, 7, 8],
+      api: [1, 2],
+      skip: 1,
+      playbackmethod: [2],
+      delivery: [1, 2],
+      vastTimeoutMs: 8000,
+      linearity: 1,
+    };
+
+    var BIDDERS = [
+      // PubMatic — banner credentials
+      { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test" } },
+      // PubMatic — video credentials
+      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test" } },
+      // Magnite — banner credentials
+      // { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
+      // // Magnite — video credentials
+      // {
+      //   bidder: "rubicon",
+      //   params: {
+      //     accountId: 14062,
+      //     siteId: 70608,
+      //     zoneId: 498816,
+      //     video: { playerWidth: 640, playerHeight: 480 },
+      //   },
+      // },
+      { bidder: "appnexus", params: { publisherId: "10433394" } },
+      { bidder: "appnexus", params: { publisherId: "13232361" } },
+      { bidder: '33across', params: { zoneId: 'examplePub123', productId: 'instream' } },
+    ];
+
+    window.AdWrapperConfig = {
+      slot_300x250: {
+        mediaTypes: {
+          banner: { sizes: [[300, 250]] },
+          video: VIDEO_PROFILE,
+        },
+        bidders: BIDDERS,
+        eager: true,
+      },
+      slot_300x600: {
+        mediaTypes: {
+          banner: { sizes: [[300, 600]] },
+          video: VIDEO_PROFILE,
+        },
+        bidders: BIDDERS,
+        eager: true,
+      },
+    };
+  </script>
+</head>
+
+<body>
+  <h1>Mixed Banner + Video — AdWrapper SDK</h1>
+  <p>
+    Two independent ad units, each requesting both banner and video demand from PubMatic +
+    Magnite. The SDK runs the Prebid auction, compares CPMs across mediaTypes, and renders the
+    highest-CPM creative — banner via friendly iframe, video via the SDK's IMA-powered player.
+  </p>
+
+  <div class="ad-row">
+    <div class="ad-card">
+      <h3>Slot A — slot_300x250 (mixed)</h3>
+      <script id="slot_300x250" src="../dist/sdk.js"></script>
+    </div>
+
+    <div class="ad-card">
+      <h3>Slot B — slot_300x600 (mixed)</h3>
+      <script id="slot_300x600" src="../dist/sdk.js"></script>
+    </div>
+  </div>
+
+  <h2>Lifecycle events</h2>
+  <pre class="log" id="events"></pre>
+
+  <script>
+    var out = document.getElementById("events");
+    function logEvent(name) {
+      return function (payload) {
+        out.textContent +=
+          "[" + new Date().toISOString().slice(11, 23) + "] " +
+          name +
+          " " +
+          JSON.stringify(payload) +
+          "\n";
+      };
+    }
+    function attach() {
+      if (!window.AdWrapper) {
+        setTimeout(attach, 10);
+        return;
+      }
+      [
+        "adRenderSuccess",
+        "adRenderFail",
+        "noFill",
+        "viewable",
+        "refresh",
+        "error",
+        "environment_detected",
+      ].forEach(function (e) {
+        window.AdWrapper.on(e, logEvent(e));
+      });
+    }
+    attach();
+  </script>
+</body>
+
+</html>

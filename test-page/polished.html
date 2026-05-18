@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — polished</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #1c2026;
+        --text: #d6d8db;
+        --muted: #888;
+        --accent: #5af;
+        --ok: #4c8;
+        --warn: #fb6;
+        --err: #f57;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        min-height: 100vh;
+      }
+      main { padding: 24px; }
+      aside {
+        background: var(--panel);
+        padding: 16px;
+        border-left: 1px solid #222;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+      }
+      h1 { margin: 0 0 16px; font-size: 18px; }
+      h2 { font-size: 14px; margin: 16px 0 8px; color: var(--accent); }
+      select, button {
+        background: #2a2f37;
+        color: var(--text);
+        border: 1px solid #333;
+        padding: 6px 10px;
+        font-family: inherit;
+        font-size: 12px;
+      }
+      .row { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+      .slot-card {
+        background: #181c22;
+        border: 1px solid #2a2f37;
+        padding: 12px;
+        min-width: 320px;
+      }
+      .slot-card .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        font-size: 10px;
+        border-radius: 2px;
+        background: #333;
+        margin-left: 6px;
+      }
+      .badge[data-state="rendered"] { background: var(--ok); color: #001; }
+      .badge[data-state="noFill"] { background: var(--warn); color: #210; }
+      .badge[data-state="error"] { background: var(--err); color: #200; }
+      .badge[data-state="bidding"] { background: var(--accent); color: #001; }
+      .spacer { height: 1200px; }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        background: #0a0c10;
+        color: var(--ok);
+        padding: 8px;
+        max-height: 280px;
+        overflow: auto;
+        white-space: pre-wrap;
+        border: 1px solid #222;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th, td { padding: 4px 6px; border-bottom: 1px solid #222; text-align: left; }
+      th { color: var(--muted); font-weight: normal; }
+      .slo-meter { display: grid; grid-template-columns: 1fr 60px; gap: 4px; font-size: 11px; }
+      .slo-meter .ok { color: var(--ok); }
+    </style>
+    <script>
+      (function () {
+        var qp = new URLSearchParams(location.search);
+        var scenario = qp.get("scenario") || "all-win";
+        window.MOCK_BIDDER_SCENARIO = scenario;
+        window.__ADW_USE_REAL = qp.get("real") === "1";
+        // Build-time-substituted env (no real credentials in this checked-in file).
+        window.__ADW_BIDDER_ENV = window.__ADW_BIDDER_ENV || {};
+
+        window.MOCK_NATIVE_BIDS = {
+          slot_native: {
+            title: "Polished Demo Native",
+            body: "Card layout from publisher template.",
+            cta: "Learn more",
+            sponsoredBy: "DemoCo",
+            image: { url: "https://placehold.co/360x180/036/fff?text=Native" },
+            clickUrl: "https://example.com/landing",
+            clickTrackers: [],
+            impressionTrackers: [],
+          },
+        };
+
+        window.AdWrapperOptions = {
+          minRefreshIntervalSec: 1,
+          consentDisabled: true,
+          retryDelaysMs: [200, 400, 800, 1600, 3200],
+        };
+
+        window.AdWrapperConfig = {
+          slot_300x250: {
+            mediaTypes: { banner: { sizes: [[300, 250]] } },
+            bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+            eager: true,
+          },
+          slot_responsive: {
+            mediaTypes: {
+              banner: {
+                sizes: {
+                  "0-767": [[300, 250]],
+                  "768+": [
+                    [728, 90],
+                    [300, 250],
+                  ],
+                },
+              },
+            },
+            bidders: [{ bidder: "appnexus", params: { placementId: 2 } }],
+            eager: true,
+          },
+          slot_lazy: {
+            mediaTypes: { banner: { sizes: [[300, 250]] } },
+            bidders: [{ bidder: "appnexus", params: { placementId: 3 } }],
+          },
+          slot_native: {
+            mediaTypes: {
+              native: {
+                requiredAssets: ["title"],
+                template:
+                  '<div class="card-native" style="background:#fff;color:#013;padding:12px;">' +
+                  '<h3 class="title">{{title}}</h3>' +
+                  '<p class="body">{{body}}</p>' +
+                  '<span class="sponsor" style="font-size:11px;opacity:0.7;">by {{sponsoredBy}}</span>' +
+                  '<button class="cta" style="margin-top:8px;">{{cta}}</button>' +
+                  "</div>",
+              },
+            },
+            bidders: [{ bidder: "appnexus", params: { placementId: 4 } }],
+            eager: true,
+          },
+          slot_refresh: {
+            mediaTypes: { banner: { sizes: [[300, 250]] } },
+            bidders: [{ bidder: "appnexus", params: { placementId: 5 } }],
+            eager: true,
+            refresh: { intervalSec: 2, sessionCap: 3 },
+          },
+        };
+      })();
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>AdWrapper — Polished Demo</h1>
+
+      <label>
+        Scenario:
+        <select id="scenario-picker">
+          <option value="all-win">all-win</option>
+          <option value="no-fill">no-fill</option>
+        </select>
+      </label>
+
+      <h2>Slots (above fold)</h2>
+      <div class="row">
+        <div class="slot-card">
+          <div class="label">slot_300x250 <span class="badge" data-slot="slot_300x250">pending</span></div>
+          <script id="slot_300x250" src="../dist/sdk.js"></script>
+        </div>
+        <div class="slot-card">
+          <div class="label">slot_responsive <span class="badge" data-slot="slot_responsive">pending</span></div>
+          <script id="slot_responsive" src="../dist/sdk.js"></script>
+        </div>
+        <div class="slot-card">
+          <div class="label">slot_native <span class="badge" data-slot="slot_native">pending</span></div>
+          <script id="slot_native" src="../dist/sdk.js"></script>
+        </div>
+        <div class="slot-card">
+          <div class="label">slot_refresh <span class="badge" data-slot="slot_refresh">pending</span></div>
+          <script id="slot_refresh" src="../dist/sdk.js"></script>
+        </div>
+      </div>
+
+      <div class="spacer">Scroll down…</div>
+
+      <h2>Lazy slot</h2>
+      <div class="slot-card">
+        <div class="label">slot_lazy <span class="badge" data-slot="slot_lazy">pending</span></div>
+        <script id="slot_lazy" src="../dist/sdk.js"></script>
+      </div>
+    </main>
+
+    <aside>
+      <h2>Debug</h2>
+      <h2>Event stream</h2>
+      <pre id="events" class="events"></pre>
+
+      <h2>Auction calls</h2>
+      <table id="auction-table">
+        <thead><tr><th>#</th><th>slots</th><th>ts</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h2>SLO meter</h2>
+      <div class="slo-meter">
+        <div>Auction completion (p95 ≤ 1500ms)</div>
+        <div class="ok" id="slo-auction">—</div>
+        <div>Time-to-render (p95 ≤ 600ms)</div>
+        <div class="ok" id="slo-render">—</div>
+      </div>
+    </aside>
+
+    <script>
+      var picker = document.getElementById("scenario-picker");
+      picker.value = window.MOCK_BIDDER_SCENARIO;
+      picker.addEventListener("change", function () {
+        var url = new URL(location.href);
+        url.searchParams.set("scenario", picker.value);
+        location.href = url.toString();
+      });
+
+      var eventsEl = document.getElementById("events");
+      var auctionTbody = document.querySelector("#auction-table tbody");
+
+      function log(name, payload) {
+        eventsEl.textContent +=
+          "[" + new Date().toISOString().slice(11, 23) + "] " +
+          name +
+          " " +
+          JSON.stringify(payload) +
+          "\n";
+      }
+
+      function setBadge(slotId, state) {
+        var el = document.querySelector('[data-slot="' + slotId + '"]');
+        if (!el) return;
+        el.textContent = state;
+        el.setAttribute("data-state", state);
+      }
+
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        var EVENTS = [
+          "bidRequested",
+          "auctionStart",
+          "auctionEnd",
+          "adRenderSuccess",
+          "adRenderFail",
+          "noFill",
+          "viewable",
+          "refresh",
+          "refresh_cap_reached",
+          "error",
+          "environment_detected",
+        ];
+        EVENTS.forEach(function (e) {
+          window.AdWrapper.on(e, function (p) {
+            log(e, p);
+            var slotId = p && p.slotId;
+            if (!slotId) return;
+            if (e === "adRenderSuccess") setBadge(slotId, "rendered");
+            else if (e === "noFill") setBadge(slotId, "noFill");
+            else if (e === "error" || e === "adRenderFail") setBadge(slotId, "error");
+          });
+        });
+      }
+      attach();
+
+      setInterval(function () {
+        var calls = window.MOCK_PBJS_CALLS || { requestBids: [] };
+        auctionTbody.innerHTML = calls.requestBids
+          .map(function (c, i) {
+            return "<tr><td>" + (i + 1) + "</td><td>" + c.adUnitCodes.join(",") + "</td><td>" +
+              new Date(c.ts).toISOString().slice(11, 19) + "</td></tr>";
+          })
+          .join("");
+      }, 200);
+    </script>
+  </body>
+</html>

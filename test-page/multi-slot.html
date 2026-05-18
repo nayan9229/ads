@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — F4 multi-slot batched auction</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 980px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .row {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 240px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+    </style>
+    <script>
+      window.AdWrapperConfig = {
+        slot_a: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+        },
+        slot_b: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 2 } }],
+        },
+        slot_c: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 3 } }],
+        },
+      };
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>Multi-slot batched auction</h1>
+    <p>Three eager slots in one row. SDK batches them into one Prebid auction call.</p>
+
+    <div class="row">
+      <script id="slot_a" src="../dist/sdk.js"></script>
+      <script id="slot_b" src="../dist/sdk.js"></script>
+      <script id="slot_c" src="../dist/sdk.js"></script>
+    </div>
+
+    <h2>Events</h2>
+    <pre class="events" id="events"></pre>
+    <h2>Auction calls</h2>
+    <pre class="events" id="calls"></pre>
+
+    <script>
+      var eventsOut = document.getElementById("events");
+      var callsOut = document.getElementById("calls");
+      function logEvent(name) {
+        return function (payload) {
+          eventsOut.textContent +=
+            "[" + new Date().toISOString().slice(11, 23) + "] " +
+            name +
+            " " +
+            JSON.stringify(payload) +
+            "\n";
+        };
+      }
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        ["adRenderSuccess", "adRenderFail", "noFill", "error"].forEach(function (e) {
+          window.AdWrapper.on(e, logEvent(e));
+        });
+      }
+      attach();
+
+      setTimeout(function () {
+        callsOut.textContent = JSON.stringify(window.MOCK_PBJS_CALLS, null, 2);
+      }, 200);
+    </script>
+  </body>
+</html>

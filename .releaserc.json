@@ -1,0 +1,75 @@
+{
+  "branches": ["main", { "name": "rc", "prerelease": "rc" }],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "docs", "scope": "readme", "release": "patch" },
+          { "type": "revert", "release": "patch" },
+          { "breaking": true, "release": "major" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "perf", "section": "Performance" },
+            { "type": "refactor", "section": "Refactors" },
+            { "type": "docs", "section": "Docs", "hidden": false },
+            { "type": "build", "section": "Build", "hidden": true },
+            { "type": "ci", "section": "CI", "hidden": true },
+            { "type": "chore", "section": "Chores", "hidden": true },
+            { "type": "test", "section": "Tests", "hidden": true }
+          ]
+        }
+      }
+    ],
+    "./scripts/sri-notes-plugin.mjs",
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file.\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+      }
+    ],
+    [
+      "@semantic-release/npm",
+      {
+        "pkgRoot": "."
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "dist/sdk.js", "label": "sdk.js (IIFE)" },
+          { "path": "dist/sdk.js.map", "label": "sdk.js sourcemap" },
+          { "path": "dist/sdk.esm.js", "label": "sdk.esm.js (ESM)" },
+          { "path": "dist/sdk.esm.js.map", "label": "sdk.esm.js sourcemap" },
+          { "path": "dist/sri.txt", "label": "SRI hashes" }
+        ],
+        "successComment": false,
+        "failComment": false
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md", "package.json"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}

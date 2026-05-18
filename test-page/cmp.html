@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — F8 consent</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 240px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+    </style>
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search);
+        var cmp = q.get("cmp") || "none";
+        var state = q.get("cmp_state") || "loaded";
+
+        if (cmp === "eu" && state === "loaded") {
+          window.__tcfapi = function (command, version, cb) {
+            if (command === "addEventListener") {
+              cb(
+                {
+                  tcString: "CO_EU_CONSENT",
+                  eventStatus: "tcloaded",
+                  gdprApplies: true,
+                  purpose: { consents: { 1: true } },
+                },
+                true,
+              );
+            }
+          };
+        } else if (cmp === "us" && state === "loaded") {
+          window.__uspapi = function (command, version, cb) {
+            if (command === "getUSPData") cb({ uspString: "1YNN" }, true);
+          };
+        }
+
+        var tz = cmp === "eu" ? "Europe/London" : "America/New_York";
+
+        window.AdWrapperOptions = {
+          consentTimeoutMs: 200,
+          consentTimezone: tz,
+        };
+
+        window.AdWrapperConfig = {
+          slot_cmp: {
+            mediaTypes: { banner: { sizes: [[300, 250]] } },
+            bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+            eager: true,
+          },
+        };
+      })();
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>F8: consent gate</h1>
+    <p>
+      Query: <code>?cmp=eu|us|none</code> +
+      <code>cmp_state=loaded|none</code>.
+    </p>
+
+    <script id="slot_cmp" src="../dist/sdk.js"></script>
+
+    <h2>Events</h2>
+    <pre class="events" id="events"></pre>
+    <h2>Auction calls</h2>
+    <pre class="events" id="calls"></pre>
+
+    <script>
+      var eventsOut = document.getElementById("events");
+      var callsOut = document.getElementById("calls");
+
+      function logEvent(name) {
+        return function (payload) {
+          eventsOut.textContent +=
+            "[" + new Date().toISOString().slice(11, 23) + "] " +
+            name +
+            " " +
+            JSON.stringify(payload) +
+            "\n";
+        };
+      }
+      function attach() {
+        if (!window.AdWrapper) {
+          setTimeout(attach, 10);
+          return;
+        }
+        ["adRenderSuccess", "noFill", "error"].forEach(function (e) {
+          window.AdWrapper.on(e, logEvent(e));
+        });
+      }
+      attach();
+
+      setInterval(function () {
+        callsOut.textContent = JSON.stringify(window.MOCK_PBJS_CALLS, null, 2);
+      }, 100);
+    </script>
+  </body>
+</html>

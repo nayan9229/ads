@@ -1,0 +1,14 @@
+dist/
+coverage/
+node_modules/
+package-lock.json
+test-results/
+playwright-report/
+.agents/
+.claude/
+*.html
+PROJECT.md
+CONTEXT.md
+ISSUES.md
+PRD.md
+README.md

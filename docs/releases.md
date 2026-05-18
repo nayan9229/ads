@@ -1,0 +1,132 @@
+# Release Process
+
+How `@nayan9229/ads` versions ship.
+
+## Channels
+
+| Channel          | Branch | Tag           | Floating URL                                        | When to use                            |
+| ---------------- | ------ | ------------- | --------------------------------------------------- | -------------------------------------- |
+| Stable           | `main` | `vX.Y.Z`      | `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js` | Default for publishers                 |
+| Pre-release / RC | `rc`   | `vX.Y.Z-rc.N` | _no floating URL_ — pinned only                     | Canary soak before promoting to stable |
+
+---
+
+## Day-to-day stable release flow
+
+1. PR merged to `main` with a Conventional Commit prefix:
+   - `feat:` → minor bump
+   - `fix:` / `perf:` / `refactor:` → patch bump
+   - `BREAKING CHANGE:` footer → major bump
+2. `.github/workflows/release.yml` runs:
+   - lint, typecheck, tests, build, size check, parse-bench, SRI hash
+   - `semantic-release` cuts the version, updates `CHANGELOG.md`, tags `vX.Y.Z`, publishes to GitHub Packages, creates a GitHub Release with `dist/` assets and SRI in body
+   - Purges jsDelivr cache for the floating `@1` URL
+3. Within ~5 min the new version is available at:
+   - `cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z/dist/sdk.js` (pinned)
+   - `cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/sdk.js` (floating)
+
+Commit messages that do not match the release rules in `.releaserc.json` (e.g. `chore:`, `test:`, `ci:`) skip release.
+
+---
+
+## Canary / RC flow
+
+For risky changes (new bidder adapter, new identity provider, breaking schema migration), promote through the `rc` channel first.
+
+### Step 1 — Branch + push
+
+```sh
+git checkout -b rc origin/main
+# cherry-pick or merge the candidate commits
+git push origin rc
+```
+
+### Step 2 — Automated pre-release
+
+`release.yml` runs on `rc` push. semantic-release publishes:
+
+- npm tag: `dist-tag: rc` (NOT `latest`)
+- Git tag: `vX.Y.(Z+1)-rc.1`
+- GitHub Release: marked **pre-release**
+- jsDelivr: pinned URL only — **no `@1` cache purge**
+
+Consumers explicitly install:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@X.Y.Z-rc.1/dist/sdk.js"></script>
+```
+
+### Step 3 — 7-day soak
+
+| Day | What to verify                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------ |
+| 0–1 | Internal pages running pinned RC URL. Monitor SLO dashboards.                                                |
+| 2–3 | Invite 1–2 friendly publishers to swap in the pinned URL.                                                    |
+| 4–7 | Watch `adRenderFail`, `E_*` error rate, `viewable` rate, p95 time-to-render. No degradation vs prior stable. |
+
+Soak ends when **all** of:
+
+- No P0 / P1 incidents tied to the RC
+- Error rate envelopes within the SLO table in `docs/slo.md`
+- Bundle size + parse-time within budgets
+
+### Step 4 — Promote to stable
+
+```sh
+git checkout main
+git merge --ff-only rc
+git push origin main
+```
+
+`release.yml` runs on `main`, cuts the non-prerelease tag (`vX.Y.Z`), and bumps the `@1` floating URL.
+
+If soak fails, the rollback runbook applies; see [`rollback.md`](rollback.md).
+
+---
+
+## What CI guards
+
+Each release run **must pass** before semantic-release fires:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build` (both IIFE + ESM)
+- `npm run size` — 30 KB gzipped cap
+- `npm run sri` — generates `dist/sri.txt`
+- `npm run parse-bench` — fails on >15% parse-time regression vs `scripts/parse-bench-baseline.json`
+
+Bumping the parse-bench baseline is **explicit**: run `UPDATE_BASELINE=1 npm run parse-bench` locally and commit the updated JSON. Never bump it in the same PR as a feature change without a written rationale.
+
+---
+
+## Versioning policy
+
+- **Major** — schema break in `window.AdWrapperConfig` or `BootstrapOptions`. Requires migration guide in `docs/migration.md` (#15).
+- **Minor** — new opt-in feature, new event name, new bidder support.
+- **Patch** — bug fix, perf, dependency bump, doc fix that affects publishers.
+
+Backwards compatibility window: at least 12 months on `@1` major. Sunset notices land in `CHANGELOG.md` with a `BREAKING CHANGE` footer at least 1 minor release before the bump.
+
+---
+
+## HITL responsibilities
+
+The release pipeline is fully automated, but the following remain human-gated:
+
+- Approving any PR titled `Rollback: …`
+- Merging the `rc` → `main` fast-forward at end of soak
+- Bumping `parse-bench-baseline.json`
+- Cutting the first `v1.0.0` (seeds semantic-release's `lastRelease`)
+- Adding / rotating the `GH_PAT` repo secret used by `@semantic-release/git`
+
+Maintainers with these capabilities are listed in `CODEOWNERS`.
+
+---
+
+## Related
+
+- [`rollback.md`](rollback.md) — what to do when a release goes wrong
+- `CHANGELOG.md` — versioned change log (autogenerated)
+- `.releaserc.json` — semantic-release config
+- `.github/workflows/release.yml` — CI pipeline

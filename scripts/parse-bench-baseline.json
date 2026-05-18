@@ -1,0 +1,8 @@
+{
+  "bundle": "dist/sdk.js",
+  "bytes": 35888,
+  "iterations": 50,
+  "median_ms": 0.001,
+  "mean_ms": 0.001,
+  "p95_ms": 0.002
+}

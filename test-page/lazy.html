@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AdWrapper Demo — F6 lazy load</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      .spacer {
+        height: 2400px;
+        background: linear-gradient(#fafafa, #e0e0e0);
+        border: 1px dashed #aaa;
+      }
+      .events {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        max-height: 200px;
+        overflow: auto;
+        background: #111;
+        color: #6f6;
+        padding: 8px;
+      }
+    </style>
+    <script>
+      window.AdWrapperConfig = {
+        slot_lazy: {
+          mediaTypes: { banner: { sizes: [[300, 250]] } },
+          bidders: [{ bidder: "appnexus", params: { placementId: 1 } }],
+        },
+      };
+    </script>
+    <script src="./mock-adapter.js"></script>
+  </head>
+  <body>
+    <h1>F6: below-fold lazy slot</h1>
+    <p>Slot well below the fold. Should not run auction until scrolled near.</p>
+
+    <div class="spacer">scroll down…</div>
+
+    <script id="slot_lazy" src="../dist/sdk.js"></script>
+
+    <h2>Auction calls</h2>
+    <pre class="events" id="calls"></pre>
+
+    <script>
+      var callsOut = document.getElementById("calls");
+      setInterval(function () {
+        callsOut.textContent = JSON.stringify(window.MOCK_PBJS_CALLS, null, 2);
+      }, 100);
+    </script>
+  </body>
+</html>
