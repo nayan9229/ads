@@ -58,6 +58,7 @@ export interface ValidatedSlotConfig {
   readonly fallback?: FallbackImageConfig;
   readonly eager?: boolean;
   readonly refresh?: RefreshConfig;
+  readonly container?: string;
 }
 
 function isSizeTuple(v: unknown): v is AdSize {
@@ -404,12 +405,23 @@ export class ConfigRegistry {
       });
     }
 
+    if (r.container !== undefined) {
+      if (typeof r.container !== "string" || r.container.length === 0) {
+        throw new ConfigError("`container` must be a non-empty string element ID", {
+          slotId,
+          field: "container",
+          value: r.container,
+        });
+      }
+    }
+
     const validated: ValidatedSlotConfig = Object.freeze({
       mediaTypes,
       bidders,
       ...(fallback ? { fallback } : {}),
       ...(refresh ? { refresh } : {}),
       ...(typeof r.eager === "boolean" ? { eager: r.eager } : {}),
+      ...(typeof r.container === "string" ? { container: r.container } : {}),
     });
     this.store.set(slotId, validated);
     return validated;

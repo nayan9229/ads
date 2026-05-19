@@ -2,10 +2,16 @@ export interface InjectArgs {
   readonly scriptEl: HTMLScriptElement | null;
   readonly slotId: string;
   readonly reserved: readonly [number, number];
+  readonly containerEl?: HTMLElement;
 }
 
 export class DomInjector {
-  inject(args: InjectArgs): HTMLDivElement {
+  inject(args: InjectArgs): HTMLElement {
+    if (args.containerEl) {
+      args.containerEl.dataset.adwrapperSlot = args.slotId;
+      return args.containerEl;
+    }
+
     const target =
       args.scriptEl ?? (document.getElementById(args.slotId) as HTMLScriptElement | null);
 

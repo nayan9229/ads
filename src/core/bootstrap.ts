@@ -176,7 +176,8 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
 
   let pbjsCached: FullPbjs | null = null;
   let orchestrator: AuctionOrchestrator | null = null;
-  const containers = new Map<string, HTMLDivElement>();
+  const containers = new Map<string, HTMLElement>();
+  const publisherContainers = new Set<string>();
   const lifecycles = new Map<string, SlotLifecycle>();
 
   // Sniff registered slot configs for any declared mediaTypes.video; if found,
@@ -367,6 +368,22 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
 
       const config = configs.register(slotId, raw);
 
+      // Resolve explicit container (D53): publisher may supply an element ID in config.
+      let resolvedContainerEl: HTMLElement | undefined;
+      if (config.container) {
+        const found = document.getElementById(config.container);
+        if (found) {
+          resolvedContainerEl = found;
+          publisherContainers.add(slotId);
+        } else {
+          callbacks.emit("error", {
+            code: "E_CONFIG_INVALID",
+            message: `container element "#${config.container}" not found for slot "${slotId}"; falling back to sibling injection`,
+            context: { slotId, field: "container", value: config.container },
+          });
+        }
+      }
+
       // Reserved container size — banner-max only per D40. Video is constrained
       // to whatever banner reserves; native uses 300x250 default if no banner.
       let reserved: readonly [number, number] = [300, 250];
@@ -386,6 +403,7 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
         scriptEl,
         slotId,
         reserved,
+        ...(resolvedContainerEl ? { containerEl: resolvedContainerEl } : {}),
       });
       containers.set(slotId, container);
 
@@ -439,7 +457,12 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       lifecycles.delete(slotId);
       const container = containers.get(slotId);
       if (container) {
-        container.remove();
+        if (publisherContainers.has(slotId)) {
+          container.innerHTML = "";
+          publisherContainers.delete(slotId);
+        } else {
+          container.remove();
+        }
         containers.delete(slotId);
       }
       if (pbjsCached?.removeAdUnit) {

@@ -43,4 +43,66 @@ describe("DomInjector", () => {
 
     expect(script.nextElementSibling).toBe(container);
   });
+
+  describe("explicit containerEl (D53)", () => {
+    it("uses the provided element directly without injecting a sibling", () => {
+      const wrapper = document.createElement("section");
+      const script = document.createElement("script");
+      script.id = "slot_explicit";
+      const existingDiv = document.createElement("div");
+      existingDiv.id = "my-ad-container";
+      wrapper.appendChild(script);
+      wrapper.appendChild(existingDiv);
+      document.body.appendChild(wrapper);
+
+      const injector = new DomInjector();
+      const container = injector.inject({
+        scriptEl: script,
+        slotId: "slot_explicit",
+        reserved: [300, 250],
+        containerEl: existingDiv,
+      });
+
+      expect(container).toBe(existingDiv);
+      expect(container.dataset.adwrapperSlot).toBe("slot_explicit");
+    });
+
+    it("does not apply inline width/height/display styles to the provided element", () => {
+      const el = document.createElement("div");
+      el.id = "publisher-owned";
+      document.body.appendChild(el);
+
+      const injector = new DomInjector();
+      injector.inject({
+        scriptEl: null,
+        slotId: "slot_no_size",
+        reserved: [300, 250],
+        containerEl: el,
+      });
+
+      expect(el.style.width).toBe("");
+      expect(el.style.height).toBe("");
+      expect(el.style.display).toBe("");
+    });
+
+    it("does not insert any additional sibling elements when containerEl is provided", () => {
+      const wrapper = document.createElement("section");
+      const script = document.createElement("script");
+      script.id = "slot_no_sibling";
+      const existingDiv = document.createElement("div");
+      wrapper.appendChild(script);
+      document.body.appendChild(wrapper);
+
+      const initialChildCount = wrapper.children.length;
+      const injector = new DomInjector();
+      injector.inject({
+        scriptEl: script,
+        slotId: "slot_no_sibling",
+        reserved: [300, 250],
+        containerEl: existingDiv,
+      });
+
+      expect(wrapper.children.length).toBe(initialChildCount);
+    });
+  });
 });

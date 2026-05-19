@@ -47,6 +47,7 @@ The SDK auto-detects the script tag (`document.currentScript`), injects a siblin
 26. As an SRE, I want documented SLOs for auction completion, time-to-render, and parse time, so that I can alert on regressions.
 27. As an SRE, I want a perf regression bench that fails CI on +15 % parse-time delta, so that no one ships a slow release accidentally.
 28. As an SRE, I want canary releases pinned to immutable URLs with a 7-day soak before the floating tag is bumped, so that bad releases do not auto-distribute.
+29. As a publisher engineer with a designed page layout, I want to specify an existing `<div>` element as the ad container, so that the SDK renders inside my pre-positioned element instead of injecting a sibling div that disrupts my layout. If the element ID cannot be resolved, I want a typed `E_CONFIG_INVALID` error emitted and the slot to fall back gracefully to the default sibling-injection path.
 29. As an SRE, I want SRI hashes published per release, so that publishers who require integrity verification can pin them.
 30. As an SRE, I want explicit rollback semantics (deprecate on npm, no pinned-URL mutation), so that incident response is unambiguous.
 31. As a contributor, I want a public Apache 2.0 repo with conventional-commits enforcement and `semantic-release`, so that contributions flow without manual versioning.

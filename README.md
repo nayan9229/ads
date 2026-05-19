@@ -185,6 +185,15 @@ window.AdWrapperConfig = {
 
     refresh: { intervalSec: 30, sessionCap: 5 },
     //   Post-viewable re-auction. Floor 30s. Omit to disable.
+
+    container: "my-ad-div",
+    //   Optional. ID of an existing <div> element to render into.
+    //   When set, the SDK uses that element directly as the ad surface — no sibling
+    //   div is injected, and the SDK does not override the element's sizing or layout.
+    //   If the ID cannot be resolved at slot-registration time, an `error` event fires
+    //   (code: E_CONFIG_INVALID) and the SDK falls back to the default sibling-injection path.
+    //   On destroy(), the element's contents are cleared but the element is not removed.
+    //   Omit to keep the default behaviour: SDK injects a sized <div> after the <script> tag.
   },
 };
 ```
