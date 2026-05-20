@@ -15,6 +15,7 @@ export type LifecycleEvent =
   | "refresh"
   | "refresh_cap_reached"
   | "environment_detected"
+  | "bidder_config"
   | "error"
   | "destroy";
 

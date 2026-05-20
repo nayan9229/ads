@@ -15,6 +15,7 @@ import { ConsentManager } from "./consent-manager";
 import { resolveSizesForViewport } from "./resolve-sizes";
 import { CspViolationLogger } from "./csp-violation-logger";
 import { AnalyticsEmitter } from "./analytics-emitter";
+import { NewRelicConfig, NewRelicSink } from "./nr-sink";
 import { CurrencyConverter } from "./currency-converter";
 import { IdentityConfig, IdentityResolver } from "./identity-resolver";
 import { Environment, detectEnvironment } from "./detect-environment";
@@ -67,6 +68,7 @@ export interface BootstrapOptions {
     readonly endpoint: string;
     readonly sampleRate?: number;
   };
+  readonly newrelic?: NewRelicConfig;
   readonly currency?: {
     readonly source?: string;
     readonly ttlMs?: number;
@@ -109,6 +111,7 @@ const FORWARDED_EVENTS = [
   "refresh",
   "error",
   "refresh_cap_reached",
+  "bidder_config",
 ] as const;
 
 export interface PublicApi {
@@ -263,17 +266,37 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       });
   if (currencyConverter) void currencyConverter.init();
 
+  const sessionId = generateSessionId();
+
   let analyticsEmitter: AnalyticsEmitter | null = null;
   if (opts.analytics?.endpoint) {
     analyticsEmitter = new AnalyticsEmitter({
       endpoint: opts.analytics.endpoint,
-      sessionId: generateSessionId(),
+      sessionId,
       ...(opts.analytics.sampleRate !== undefined ? { sampleRate: opts.analytics.sampleRate } : {}),
     });
     if (typeof window !== "undefined") analyticsEmitter.attachPageHideFlush(window);
     for (const evt of FORWARDED_EVENTS) {
       callbacks.on(evt, (payload) => {
         analyticsEmitter!.emit(evt, (payload as Record<string, unknown>) ?? {});
+      });
+    }
+  }
+
+  let nrSink: NewRelicSink | null = null;
+  if (opts.newrelic && opts.newrelic.licenseKey && opts.newrelic.applicationID) {
+    nrSink = new NewRelicSink({
+      config: opts.newrelic,
+      sessionId,
+    });
+    for (const evt of FORWARDED_EVENTS) {
+      callbacks.on(evt, (payload) => {
+        const data = (payload as Record<string, unknown>) ?? {};
+        if (evt === "error") {
+          nrSink!.emitError(data);
+        } else {
+          nrSink!.emit(evt, data);
+        }
       });
     }
   }
@@ -481,6 +504,10 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       if (analyticsEmitter) {
         analyticsEmitter.dispose();
         analyticsEmitter = null;
+      }
+      if (nrSink) {
+        nrSink.dispose();
+        nrSink = null;
       }
     },
   };

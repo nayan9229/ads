@@ -113,6 +113,23 @@ window.AdWrapperOptions = {
   },
   //   sendBeacon emit. sampleRate 0..1. Buffer flush on pagehide.
 
+  // === New Relic Browser sink ===
+  newrelic: {
+    licenseKey: "NRJS-aaaaaaaaaaaaaaaaaa",
+    applicationID: "1234567890",
+    accountID: "1234567",
+    // beacon: "bam.eu01.nr-data.net",       // EU data residency. Default "bam.nr-data.net".
+    // errorBeacon: "bam.eu01.nr-data.net",  // Default = beacon.
+    // agentSrc: "https://js-agent.newrelic.com/nr-loader-spa-current.min.js",
+    sampleRate: 0.1,                          // Non-error events. Errors always 100%.
+  },
+  //   SDK forwards lifecycle events to publisher's NR account. Errors → noticeError;
+  //   other events → addPageAction("adwrapper_" + event). If window.newrelic already
+  //   present (publisher installed NR snippet in <head>), SDK reuses it. Otherwise
+  //   SDK seeds window.NREUM and async-injects the NR loader. PRIVACY: per-event
+  //   attribute allowlist, identifier-class fields (eids/deviceId/userId) dropped,
+  //   cpm bucketed to 0.25 increments. See docs/adr/0002-newrelic-browser-sink.md.
+
   // === Misc ===
   cspNonce: "abc123",
   //   Propagate to injected <script> + <iframe> nonces.
@@ -306,7 +323,59 @@ Payloads include `slotId`. Render events also include `adId`, `size`, `cpm`, `cu
 | `identityResolver.tiers` | `[1, 2, 3, 4]` (all tiers) |
 | `schain` | absent — no `pbjs.setConfig({ schain })` call |
 | `ortb2` | absent — no first-party passthrough |
+| `newrelic` | absent — NR sink disabled (zero bytes of NR agent loaded) |
+| `newrelic.sampleRate` | `1.0` (errors always 100% regardless) |
+| `newrelic.beacon` / `errorBeacon` | `bam.nr-data.net` (US). EU: `bam.eu01.nr-data.net`. |
+| `newrelic.agentSrc` | `https://js-agent.newrelic.com/nr-loader-spa-current.min.js` |
 | Bundle size cap | 30 KB gzipped |
+
+### CSP requirements for `newrelic` option
+
+The publisher CSP must allow the NR agent script + beacons:
+
+```
+script-src  ... https://js-agent.newrelic.com
+connect-src ... https://*.nr-data.net
+```
+
+For EU data residency, replace `*.nr-data.net` with `*.eu01.nr-data.net` (or include both).
+
+### NR event mapping
+
+Every SDK emission routes through `newrelic.addPageAction("adwrapper_" + event, attrs)`. NRQL queries against `adwrapper_*` PageActions are the canonical view; the NR Errors UI is intentionally unused (see lockdown below).
+
+| SDK event | NR PageAction name | Attributes |
+| --- | --- | --- |
+| `error` | `adwrapper_error` | `code`, `message`, `slotId?`, `sessionId` |
+| `bidder_config` | `adwrapper_bidder_config` | `slotId`, `bidder_count`, `bidder_names` (CSV), `bidders_json` (stringified `[{bidder, params}]` with PII-class keys stripped) |
+| `adRenderSuccess` | `adwrapper_adRenderSuccess` | `slotId`, `bidder`, `cpm_bucket`, `size`, `mediaType` |
+| `adRenderFail` | `adwrapper_adRenderFail` | `slotId`, `reason` |
+| `noFill` / `viewable` | `adwrapper_noFill` / `adwrapper_viewable` | `slotId` |
+| `refresh` | `adwrapper_refresh` | `slotId`, `count` |
+| `refresh_cap_reached` | `adwrapper_refresh_cap_reached` | `slotId`, `cap` |
+| `environment_detected` | `adwrapper_environment_detected` | `environment` |
+
+`bidder_config` fires once per slot when the auction enqueues (after lazy/consent gating, before `requestBids`). It does not re-fire on `refresh`. Bidder params are normalized — non-primitive values are JSON-stringified, and keys in the PII denylist (`email`, `hashedEmail`, `sha256email`, `uid2`, `uid2_token`, `userId`, `deviceId`, `ifa`, `idfa`, `gaid`, `eids`, `ip`, `tcString`, `gdprConsent`, `consent`, `usp`, `uspString`, `us_privacy`) are dropped before serialization. `bidders_json` is hard-truncated at 4000 characters.
+
+`cpm` is never forwarded raw — bucketed to `Math.floor(cpm * 4) / 4` as `cpm_bucket` to bound NRQL cardinality and avoid exporting exact prices. Identifier-class fields (`eids`, `deviceId`, `userId`, `email`) are dropped by the allowlist even if present in upstream payloads.
+
+### NR Browser feature lockdown (SDK-injected agent only)
+
+When the SDK injects the NR loader (no pre-existing `window.newrelic` on the page), it seeds `NREUM.init` to disable every NR Browser auto-feature so the agent forwards only the `adwrapper_*` PageActions emitted by the SDK:
+
+| NR feature | State | Effect |
+| --- | --- | --- |
+| `ajax` | `enabled: false` + `deny_list: ["*"]` | XHR/fetch calls are not reported |
+| `jserrors` | `enabled: false` | Uncaught JS errors on the page are not reported |
+| `metrics` | `enabled: false` | Web-vitals (LCP/FID/CLS), JS heap, etc. not reported |
+| `page_view_event` | `enabled: false` | No PageView event |
+| `page_view_timing` | `enabled: false` | No load timings |
+| `session_replay` / `session_trace` | `enabled: false` | No replay or trace |
+| `spa` | `enabled: false` | No SPA route-change tracking |
+| `distributed_tracing` | `enabled: false` | No W3C trace headers added to outbound requests |
+| `page_action` | `enabled: true` | **Only feature kept on; ferries `adwrapper_*` actions** |
+
+If the publisher already has the NR Browser snippet installed in `<head>`, the SDK reuses `window.newrelic` instead of injecting its own loader — in that case this lockdown does **not** apply and the publisher's own NR config governs everything except the `adwrapper_*` PageActions the SDK emits.
 
 ---
 
@@ -338,6 +407,5 @@ npx http-server -p 4173 .
 [Apache 2.0](./LICENSE).
 
 ```
-claude --resume 9ddcabd5-f013-4c49-833f-7a9d46a49a9a                                                                                                                   
-claude-n --resume 9ddcabd5-f013-4c49-833f-7a9d46a49a9a                                                                                                                 
+claude-v --resume 69b76cf5-e935-4ab3-813e-ce29b67b3b9a                                                                                                                 
 ```

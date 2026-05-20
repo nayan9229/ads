@@ -137,10 +137,35 @@ export class SlotLifecycle {
   }
 
   private enqueueInitial(): void {
+    this.emitBidderConfig();
     this.deps.orchestrator!.enqueue({
       slotId: this.deps.slotId,
       config: this.deps.config,
       lifecycle: this,
+    });
+  }
+
+  private emitBidderConfig(): void {
+    const bidders = this.deps.config.bidders;
+    if (!bidders || bidders.length === 0) return;
+    const normalized = bidders.map((b) => ({
+      bidder: b.bidder,
+      params: normalizeBidderParams(b.params),
+    }));
+    let bidders_json: string;
+    try {
+      bidders_json = JSON.stringify(normalized);
+    } catch {
+      bidders_json = "[]";
+    }
+    if (bidders_json.length > MAX_BIDDERS_JSON_LEN) {
+      bidders_json = bidders_json.slice(0, MAX_BIDDERS_JSON_LEN);
+    }
+    this.deps.callbacks.emit("bidder_config", {
+      slotId: this.deps.slotId,
+      bidder_count: bidders.length,
+      bidder_names: bidders.map((b) => b.bidder).join(","),
+      bidders_json,
     });
   }
 
@@ -335,4 +360,49 @@ export class SlotLifecycle {
     });
     this.retryScheduler.start();
   }
+}
+
+const MAX_BIDDERS_JSON_LEN = 4000;
+
+const BIDDER_PARAM_DENYLIST: ReadonlySet<string> = new Set([
+  "email",
+  "hashedEmail",
+  "sha256email",
+  "sha256_email",
+  "uid2",
+  "uid2_token",
+  "userId",
+  "user_id",
+  "deviceId",
+  "device_id",
+  "ifa",
+  "idfa",
+  "gaid",
+  "eids",
+  "ip",
+  "tcString",
+  "gdprConsent",
+  "consent",
+  "usp",
+  "uspString",
+  "us_privacy",
+]);
+
+function normalizeBidderParams(params: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(params)) {
+    if (BIDDER_PARAM_DENYLIST.has(key)) continue;
+    const val = params[key];
+    if (val === null || val === undefined) continue;
+    if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+      out[key] = val;
+    } else if (typeof val === "object") {
+      try {
+        out[key] = JSON.parse(JSON.stringify(val)) as unknown;
+      } catch {
+        // skip non-serializable
+      }
+    }
+  }
+  return out;
 }

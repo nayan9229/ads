@@ -96,6 +96,26 @@
         },
       },
 
+      // D54: New Relic Browser sink. Forwards lifecycle events (errors →
+      // noticeError, others → addPageAction("adwrapper_*")) to publisher's NR
+      // account. Per-event attribute allowlist + cpm bucketing (0.25). Errors
+      // never sampled; sampleRate gates other events. Swap the placeholder
+      // credentials below for your NR Browser app, or comment the whole block
+      // out to disable. CSP must allow:
+      //   script-src  https://js-agent.newrelic.com
+      //   connect-src https://*.nr-data.net          (EU: https://*.eu01.nr-data.net)
+
+      // newrelic: {
+      //   licenseKey: "",
+      //   applicationID: "",
+      //   accountID: "",
+      //   // beacon: "bam.nr-data.net",          // EU: "bam.eu01.nr-data.net"
+      //   // errorBeacon: "bam.nr-data.net",
+      //   // agentSrc: "https://js-agent.newrelic.com/nr-loader-spa-current.min.js",
+      //   sampleRate: 1.0,                       // non-error events; errors always 100%
+      //   // enabled: false,                     // hard kill switch
+      // },
+
       prebidConfig: {
         bidderTimeout: 2500,
         enableSendAllBids: true,
@@ -146,11 +166,11 @@
 
     var BIDDERS = [
       // PubMatic — banner credentials
-      { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x250" } },
+      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x250" } },
       // PubMatic — video credentials
-      { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
+      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
       // Magnite — banner credentials
-      // { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
+      { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
       // // Magnite — video credentials
       // {
       //   bidder: "rubicon",

@@ -2,6 +2,13 @@ import typescript from "@rollup/plugin-typescript";
 import nodeResolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import terser from "@rollup/plugin-terser";
+import { readFileSync } from "node:fs";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const buildTime = new Date().toISOString();
+const commitSha = (process.env.GITHUB_SHA || process.env.GIT_COMMIT || "").slice(0, 7) || "local";
+
+const banner = `/*! ${pkg.name} v${pkg.version} | build ${buildTime} | commit ${commitSha} | (c) ${new Date().getFullYear()} ${pkg.license || ""} */`;
 
 const plugins = [
   nodeResolve({ browser: true }),
@@ -14,7 +21,11 @@ const plugins = [
   terser({
     ecma: 2017,
     compress: { passes: 2 },
-    format: { comments: false },
+    format: {
+      // Strip every comment EXCEPT the leading legal banner (/*! ... */).
+      comments: (_node, comment) =>
+        comment.type === "comment2" && /^\s*!/.test(comment.value),
+    },
   }),
 ];
 
@@ -26,6 +37,7 @@ export default [
       format: "iife",
       name: "AdWrapperBundle",
       sourcemap: true,
+      banner,
     },
     plugins,
   },
@@ -35,6 +47,7 @@ export default [
       file: "dist/pubads.mini.esm.js",
       format: "esm",
       sourcemap: true,
+      banner,
     },
     plugins,
   },
