@@ -164,7 +164,7 @@ describe("NewRelicSink", () => {
     it("does not seed window.NREUM when agent already present", () => {
       const agent = makeAgent();
       const win = makeWin({ newrelic: agent });
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const _sink = new NewRelicSink({
         config: baseConfig,
         sessionId: "s",
@@ -314,7 +314,7 @@ describe("NewRelicSink", () => {
     it("seeds window.NREUM with publisher config before triggering loader", () => {
       const loader: ScriptLoader = () => new Promise<void>(() => undefined);
       const win = makeWin();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const _sink = new NewRelicSink({
         config: {
           licenseKey: "lk-eu",
@@ -344,7 +344,7 @@ describe("NewRelicSink", () => {
     it("init disables every NR auto-feature except page_action", () => {
       const loader: ScriptLoader = () => new Promise<void>(() => undefined);
       const win = makeWin();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const _sink = new NewRelicSink({
         config: baseConfig,
         sessionId: "s",
@@ -368,7 +368,7 @@ describe("NewRelicSink", () => {
     it("enabled: false skips loader injection and NREUM seeding", () => {
       const loader = jest.fn(() => new Promise<void>(() => undefined));
       const win = makeWin();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const _sink = new NewRelicSink({
         config: { ...baseConfig, enabled: false },
         sessionId: "s",

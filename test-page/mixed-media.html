@@ -138,9 +138,22 @@
             },
           },
         },
+        // Cookie sync — enabled for ALL bidders (iframe + pixel).
+        // filterSettings.bidders = "*" + filter = "include" lets every adapter
+        // run syncs. Prebid still strips syncs when CMP blocks (GDPR / CCPA),
+        // so this is safe with consentDisabled: false in prod.
         userSync: {
+          syncEnabled: true,
+          syncsPerBidder: 5,           // 0 = unlimited
+          syncDelay: 3000,             // ms after auction before firing syncs
+          auctionDelay: 0,             // ms to delay auction waiting for syncs
           iframeEnabled: true,
-          syncsPerBidder: 5
+          pixelEnabled: true,
+          aliasSyncEnabled: true,
+          filterSettings: {
+            iframe: { bidders: "*", filter: "include" },
+            image:  { bidders: "*", filter: "include" },
+          },
         },
         // any pbjs.setConfig key
       },

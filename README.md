@@ -26,7 +26,7 @@ Prebid.js wrapper SDK. Drop one `<script>` per slot. SDK auto-load Prebid.js + I
 
     <script
       id="homepage_300x250_top"
-      src="https://cdn.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js"
+      src="https://cdn.jsdelivr.net/gh/nayan9229/ads@latest/dist/pubads.mini.js"
     ></script>
 
     <article>Content below the ad.</article>
@@ -327,6 +327,7 @@ Payloads include `slotId`. Render events also include `adId`, `size`, `cpm`, `cu
 | `newrelic.sampleRate` | `1.0` (errors always 100% regardless) |
 | `newrelic.beacon` / `errorBeacon` | `bam.nr-data.net` (US). EU: `bam.eu01.nr-data.net`. |
 | `newrelic.agentSrc` | `https://js-agent.newrelic.com/nr-loader-spa-current.min.js` |
+| `prebidConfig.userSync` | absent — Prebid's own defaults apply (`iframeEnabled: false`, `pixelEnabled: true`, `syncsPerBidder: 5`, `syncDelay: 3000`, `auctionDelay: 0`). To enable cookie sync for **all** bidders pass: `userSync: { syncEnabled: true, iframeEnabled: true, pixelEnabled: true, syncsPerBidder: 5, syncDelay: 3000, auctionDelay: 0, aliasSyncEnabled: true, filterSettings: { iframe: { bidders: "*", filter: "include" }, image: { bidders: "*", filter: "include" } } }` inside `prebidConfig`. Prebid auto-strips syncs when CMP blocks (GDPR/CCPA). Publisher CSP must allow each adapter's sync host in `img-src` (pixel) and `frame-src` (iframe). |
 | Bundle size cap | 30 KB gzipped |
 
 ### CSP requirements for `newrelic` option
