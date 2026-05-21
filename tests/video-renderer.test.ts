@@ -96,6 +96,108 @@ describe("VideoRenderer", () => {
     expect(reqArg.adTagUrl).toBe("https://cdn.example.com/vast.xml");
   });
 
+  it("emits adComplete with { slotId, mediaType: 'video' } on IMA COMPLETE", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const seen: unknown[] = [];
+    callbacks.on("adComplete", (p) => seen.push(p));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_ac", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_ac_video",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const completeCbs: Array<(e: unknown) => void> = [];
+    const adsManager = {
+      addEventListener: (type: string, cb: (e: unknown) => void) => {
+        if (type === "complete") completeCbs.push(cb);
+      },
+      init: jest.fn(),
+      start: jest.fn(),
+    };
+    const adsManagerLoadedCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adsManagerLoaded",
+    )?.[1] as (e: unknown) => void;
+    adsManagerLoadedCb({ getAdsManager: () => adsManager });
+
+    for (const cb of completeCbs) cb({});
+
+    expect(seen).toEqual([{ slotId: "slot_ac_video", mediaType: "video" }]);
+  });
+
+  it("emits both viewable and adComplete on IMA COMPLETE", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const events: Array<{ event: string; payload: unknown }> = [];
+    callbacks.on("viewable",   (p) => events.push({ event: "viewable",   payload: p }));
+    callbacks.on("adComplete", (p) => events.push({ event: "adComplete", payload: p }));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_both", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_both",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const completeCbs: Array<(e: unknown) => void> = [];
+    const adsManager = {
+      addEventListener: (type: string, cb: (e: unknown) => void) => {
+        if (type === "complete") completeCbs.push(cb);
+      },
+      init: jest.fn(),
+      start: jest.fn(),
+    };
+    const adsManagerLoadedCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adsManagerLoaded",
+    )?.[1] as (e: unknown) => void;
+    adsManagerLoadedCb({ getAdsManager: () => adsManager });
+
+    for (const cb of completeCbs) cb({});
+
+    expect(events.map((e) => e.event)).toEqual(["viewable", "adComplete"]);
+  });
+
+  it("does not emit adComplete on IMA AD_ERROR", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const seen: unknown[] = [];
+    callbacks.on("adComplete", (p) => seen.push(p));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_err", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_err",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const adErrorCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adError",
+    )?.[1] as (e: unknown) => void;
+    adErrorCb({ getError: () => ({ getMessage: () => "network error" }) });
+
+    expect(seen).toHaveLength(0);
+  });
+
   it("bridges IMA STARTED event to adRenderSuccess lifecycle event", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
