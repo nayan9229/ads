@@ -11,6 +11,16 @@ or `rc`. Do not edit prior entries by hand — re-tag via the rollback runbook
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-05-21
+
+### Features
+
+- **`adComplete` lifecycle event** (D58) — fires when an ad has run its course: for video, emitted immediately after IMA `COMPLETE` (clean playback end; errors and skips excluded); for banner, emitted after a configurable `adCompleteDelayMs` (default 10 000 ms) following the banner render. When `refresh` is configured, the banner timer starts only after the last refresh cycle's render (`onCapReached` flag + Option-B timing). Timer cleared on `destroy()`. Payload: `{ slotId, mediaType: "banner" | "video" }`. Added to `FORWARDED_EVENTS` (analytics beacon + NR sink). Per-slot config: `adCompleteDelayMs?: number` (non-negative, defaults to 10 000 ms).
+
+### Bundle
+
+- gzipped `dist/pubads.mini.js`: 12.75 KB → 12.93 KB (+0.18 KB). Cap unchanged (30 KB gz); 17.07 KB headroom.
+
 ## [1.1.1] — 2026-05-20
 
 ### Features
