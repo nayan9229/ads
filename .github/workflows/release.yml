@@ -70,3 +70,4 @@ jobs:
           PKG_VERSION=$(node -p "require('./package.json').version")
           curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@${PKG_VERSION}/dist/pubads.mini.js" || true
           curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js" || true
+          curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@latest/dist/pubads.mini.js" || true
