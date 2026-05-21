@@ -211,6 +211,11 @@ window.AdWrapperConfig = {
     //   (code: E_CONFIG_INVALID) and the SDK falls back to the default sibling-injection path.
     //   On destroy(), the element's contents are cleared but the element is not removed.
     //   Omit to keep the default behaviour: SDK injects a sized <div> after the <script> tag.
+
+    adCompleteDelayMs: 10000,
+    //   Banner only. Milliseconds after banner render before `adComplete` fires.
+    //   When `refresh` is configured, the timer starts after the LAST refresh cycle renders
+    //   (not on each cycle). Default: 10000. Omit to keep default.
   },
 };
 ```
@@ -288,14 +293,19 @@ Available after first `<script src="pubads.mini.js">` execute.
 
 ```js
 // Subscribe events
-window.AdWrapper.on("adRenderSuccess", (p) => console.log(p));
-window.AdWrapper.on("adRenderFail",    (p) => {});
-window.AdWrapper.on("noFill",          (p) => {});
-window.AdWrapper.on("viewable",        (p) => {});
-window.AdWrapper.on("refresh",         (p) => {});
-window.AdWrapper.on("error",           (p) => {});
+window.AdWrapper.on("adRenderSuccess",     (p) => console.log(p));
+window.AdWrapper.on("adRenderFail",        (p) => {});
+window.AdWrapper.on("noFill",              (p) => {});
+window.AdWrapper.on("viewable",            (p) => {});
+window.AdWrapper.on("refresh",             (p) => {});
+window.AdWrapper.on("adComplete",          (p) => {});
+// adComplete fires when the ad has run its course:
+//   video → immediately after IMA COMPLETE (clean playback; errors/skips excluded)
+//   banner → adCompleteDelayMs ms after render (last cycle when refresh is configured)
+// Payload: { slotId, mediaType: "banner" | "video" }
+window.AdWrapper.on("error",               (p) => {});
 window.AdWrapper.on("refresh_cap_reached", (p) => {});
-window.AdWrapper.on("environment_detected", (p) => {});
+window.AdWrapper.on("environment_detected",(p) => {});
 
 // SPA destroy
 window.AdWrapper.destroy("my_slot_id");
@@ -352,6 +362,7 @@ Every SDK emission routes through `newrelic.addPageAction("adwrapper_" + event, 
 | `adRenderSuccess` | `adwrapper_adRenderSuccess` | `slotId`, `bidder`, `cpm_bucket`, `size`, `mediaType` |
 | `adRenderFail` | `adwrapper_adRenderFail` | `slotId`, `reason` |
 | `noFill` / `viewable` | `adwrapper_noFill` / `adwrapper_viewable` | `slotId` |
+| `adComplete` | `adwrapper_adComplete` | `slotId`, `mediaType` (`"banner"` or `"video"`) |
 | `refresh` | `adwrapper_refresh` | `slotId`, `count` |
 | `refresh_cap_reached` | `adwrapper_refresh_cap_reached` | `slotId`, `cap` |
 | `environment_detected` | `adwrapper_environment_detected` | `environment` |
