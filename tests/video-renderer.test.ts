@@ -14,7 +14,7 @@ interface FakeImaModule {
   AdsRequest: jest.Mock;
   AdsManagerLoadedEvent: { Type: { ADS_MANAGER_LOADED: "adsManagerLoaded" } };
   AdEvent: {
-    Type: { STARTED: "start"; COMPLETE: "complete"; AD_PROGRESS: "adProgress" };
+    Type: { STARTED: "start"; COMPLETE: "complete"; SKIPPED: "skip"; AD_PROGRESS: "adProgress" };
   };
   AdErrorEvent: { Type: { AD_ERROR: "adError" } };
 }
@@ -38,7 +38,7 @@ function makeImaStub(): FakeImaModule & { lastAdsLoader: FakeAdsLoader | null } 
       Object.assign(this as object, {});
     }) as unknown as jest.Mock,
     AdsManagerLoadedEvent: { Type: { ADS_MANAGER_LOADED: "adsManagerLoaded" } },
-    AdEvent: { Type: { STARTED: "start", COMPLETE: "complete", AD_PROGRESS: "adProgress" } },
+    AdEvent: { Type: { STARTED: "start", COMPLETE: "complete", SKIPPED: "skip", AD_PROGRESS: "adProgress" } },
     AdErrorEvent: { Type: { AD_ERROR: "adError" } },
     get lastAdsLoader() {
       return lastAdsLoader;
@@ -196,6 +196,118 @@ describe("VideoRenderer", () => {
     adErrorCb({ getError: () => ({ getMessage: () => "network error" }) });
 
     expect(seen).toHaveLength(0);
+  });
+
+  it("emits adSkipped with { slotId, mediaType: 'video' } on IMA SKIPPED", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const seen: unknown[] = [];
+    callbacks.on("adSkipped", (p) => seen.push(p));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_sk", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_sk",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const skipCbs: Array<(e: unknown) => void> = [];
+    const adsManager = {
+      addEventListener: (type: string, cb: (e: unknown) => void) => {
+        if (type === "skip") skipCbs.push(cb);
+      },
+      init: jest.fn(),
+      start: jest.fn(),
+    };
+    const adsManagerLoadedCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adsManagerLoaded",
+    )?.[1] as (e: unknown) => void;
+    adsManagerLoadedCb({ getAdsManager: () => adsManager });
+
+    for (const cb of skipCbs) cb({});
+
+    expect(seen).toEqual([{ slotId: "slot_sk", mediaType: "video" }]);
+  });
+
+  it("does not emit viewable or adComplete on IMA SKIPPED", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const unexpected: string[] = [];
+    callbacks.on("viewable",   () => unexpected.push("viewable"));
+    callbacks.on("adComplete", () => unexpected.push("adComplete"));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_sk2", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_sk2",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const skipCbs: Array<(e: unknown) => void> = [];
+    const adsManager = {
+      addEventListener: (type: string, cb: (e: unknown) => void) => {
+        if (type === "skip") skipCbs.push(cb);
+      },
+      init: jest.fn(),
+      start: jest.fn(),
+    };
+    const adsManagerLoadedCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adsManagerLoaded",
+    )?.[1] as (e: unknown) => void;
+    adsManagerLoadedCb({ getAdsManager: () => adsManager });
+
+    for (const cb of skipCbs) cb({});
+
+    expect(unexpected).toHaveLength(0);
+  });
+
+  it("adSkipped and adComplete are independent — COMPLETE does not emit adSkipped", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const skipped: unknown[] = [];
+    callbacks.on("adSkipped", (p) => skipped.push(p));
+
+    const ima = makeImaStub();
+    const renderer = new VideoRenderer(
+      ima as unknown as ConstructorParameters<typeof VideoRenderer>[0],
+      callbacks,
+    );
+    renderer.render({
+      container,
+      bid: { adId: "bid_ind", vastUrl: "https://cdn.example.com/vast.xml" },
+      slotId: "slot_ind",
+    });
+
+    const loader = ima.lastAdsLoader!;
+    const completeCbs: Array<(e: unknown) => void> = [];
+    const adsManager = {
+      addEventListener: (type: string, cb: (e: unknown) => void) => {
+        if (type === "complete") completeCbs.push(cb);
+      },
+      init: jest.fn(),
+      start: jest.fn(),
+    };
+    const adsManagerLoadedCb = loader.addEventListener.mock.calls.find(
+      (c) => c[0] === "adsManagerLoaded",
+    )?.[1] as (e: unknown) => void;
+    adsManagerLoadedCb({ getAdsManager: () => adsManager });
+
+    for (const cb of completeCbs) cb({});
+
+    expect(skipped).toHaveLength(0);
   });
 
   it("bridges IMA STARTED event to adRenderSuccess lifecycle event", () => {

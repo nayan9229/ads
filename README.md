@@ -303,6 +303,11 @@ window.AdWrapper.on("adComplete",          (p) => {});
 //   video → immediately after IMA COMPLETE (clean playback; errors/skips excluded)
 //   banner → adCompleteDelayMs ms after render (last cycle when refresh is configured)
 // Payload: { slotId, mediaType: "banner" | "video" }
+window.AdWrapper.on("adSkipped",           (p) => {});
+// adSkipped fires when the user clicks the skip button (IMA SKIPPED event).
+// Video-only. Does NOT fire viewable or adComplete — skip is early termination,
+// not a completion or IAB-viewable engagement.
+// Payload: { slotId, mediaType: "video" }
 window.AdWrapper.on("error",               (p) => {});
 window.AdWrapper.on("refresh_cap_reached", (p) => {});
 window.AdWrapper.on("environment_detected",(p) => {});
@@ -363,6 +368,7 @@ Every SDK emission routes through `newrelic.addPageAction("adwrapper_" + event, 
 | `adRenderFail` | `adwrapper_adRenderFail` | `slotId`, `reason` |
 | `noFill` / `viewable` | `adwrapper_noFill` / `adwrapper_viewable` | `slotId` |
 | `adComplete` | `adwrapper_adComplete` | `slotId`, `mediaType` (`"banner"` or `"video"`) |
+| `adSkipped` | `adwrapper_adSkipped` | `slotId`, `mediaType` (`"video"`) |
 | `refresh` | `adwrapper_refresh` | `slotId`, `count` |
 | `refresh_cap_reached` | `adwrapper_refresh_cap_reached` | `slotId`, `cap` |
 | `environment_detected` | `adwrapper_environment_detected` | `environment` |

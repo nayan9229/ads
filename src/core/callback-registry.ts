@@ -17,6 +17,7 @@ export type LifecycleEvent =
   | "environment_detected"
   | "bidder_config"
   | "adComplete"
+  | "adSkipped"
   | "error"
   | "destroy";
 

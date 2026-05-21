@@ -157,7 +157,7 @@
         },
         // any pbjs.setConfig key
       },
-      retryDelaysMs: [],
+      retryDelaysMs: [1000, 2000, 4000],
     };
 
     // Real-bidder credentials. Bidder param shape mirrors Prebid adapter docs.
@@ -181,7 +181,7 @@
       // PubMatic — banner credentials
       // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x250" } },
       // PubMatic — video credentials
-      // { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
+      { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
       // Magnite — banner credentials
       { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
       // // Magnite — video credentials
@@ -247,14 +247,16 @@
         },
         bidders: BIDDERS,
         eager: true,
+        adCompleteDelayMs: 5,
       },
       slot_300x600: {
         mediaTypes: {
           banner: { sizes: [[300, 600]] },
-          video: VIDEO_PROFILE,
+          // video: VIDEO_PROFILE,
         },
         bidders: BIDDERS,
         eager: true,
+        adCompleteDelayMs: 5000,
       },
     };
 
@@ -309,6 +311,7 @@
         "viewable",
         "refresh",
         "adComplete",
+        "adSkipped",
         "error",
         "environment_detected",
       ].forEach(function (e) {

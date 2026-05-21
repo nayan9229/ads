@@ -84,6 +84,9 @@ export class VideoRenderer {
           this.callbacks.emit("viewable", { slotId: args.slotId, complete: true });
           this.callbacks.emit("adComplete", { slotId: args.slotId, mediaType: "video" });
         });
+        adsManager.addEventListener(this.ima.AdEvent.Type["SKIPPED"] as string, () => {
+          this.callbacks.emit("adSkipped", { slotId: args.slotId, mediaType: "video" });
+        });
 
         try {
           adsManager.init?.(
