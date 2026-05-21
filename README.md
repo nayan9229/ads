@@ -395,7 +395,7 @@ If the publisher already has the NR Browser snippet installed in `<head>`, the S
 
 ```sh
 npm install
-npm test          # Jest — 153 tests, 37 suites
+npm test          # Jest — 244 tests, 53 suites
 npm run typecheck # tsc --noEmit
 npm run build     # Rollup IIFE → dist/pubads.mini.js
 npm run size      # Gzipped bundle cap check (30 KB)
