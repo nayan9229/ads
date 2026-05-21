@@ -82,6 +82,7 @@ export class VideoRenderer {
         });
         adsManager.addEventListener(this.ima.AdEvent.Type["COMPLETE"] as string, () => {
           this.callbacks.emit("viewable", { slotId: args.slotId, complete: true });
+          this.callbacks.emit("adComplete", { slotId: args.slotId, mediaType: "video" });
         });
 
         try {

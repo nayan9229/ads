@@ -54,6 +54,8 @@ export class SlotLifecycle {
   private destroyed = false;
   private lazyAborted = false;
   private viewabilityAborted = false;
+  private adCompleteTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshCapReached = false;
 
   constructor(private readonly deps: SlotLifecycleDeps) {}
 
@@ -103,8 +105,25 @@ export class SlotLifecycle {
       this.retryResolver = null;
       r(true);
     }
+    if (this.adCompleteTimer !== null) {
+      clearTimeout(this.adCompleteTimer);
+      this.adCompleteTimer = null;
+    }
     this.currentState = "destroyed";
     this.deps.callbacks.emit("destroy", { slotId: this.deps.slotId });
+  }
+
+  private scheduleAdComplete(): void {
+    if (this.deps.config.refresh && !this.refreshCapReached) return;
+    if (this.adCompleteTimer !== null) {
+      clearTimeout(this.adCompleteTimer);
+    }
+    const delayMs = this.deps.config.adCompleteDelayMs ?? 10_000;
+    this.adCompleteTimer = setTimeout(() => {
+      this.adCompleteTimer = null;
+      if (this.destroyed) return;
+      this.deps.callbacks.emit("adComplete", { slotId: this.deps.slotId, mediaType: "banner" });
+    }, delayMs);
   }
 
   start(): void {
@@ -249,6 +268,7 @@ export class SlotLifecycle {
         this.deps.container.style.width = `${banner.width}px`;
         this.deps.container.style.height = `${banner.height}px`;
       }
+      this.scheduleAdComplete();
     }
     this.currentState = "rendered";
 
@@ -293,6 +313,7 @@ export class SlotLifecycle {
       },
       onCapReached: () => {
         if (this.destroyed) return;
+        this.refreshCapReached = true;
         const cap = refresh.sessionCap ?? 0;
         this.deps.callbacks.emit("refresh_cap_reached", {
           slotId: this.deps.slotId,

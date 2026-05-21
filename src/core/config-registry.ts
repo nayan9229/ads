@@ -59,6 +59,7 @@ export interface ValidatedSlotConfig {
   readonly eager?: boolean;
   readonly refresh?: RefreshConfig;
   readonly container?: string;
+  readonly adCompleteDelayMs?: number;
 }
 
 function isSizeTuple(v: unknown): v is AdSize {
@@ -415,6 +416,20 @@ export class ConfigRegistry {
       }
     }
 
+    if (r.adCompleteDelayMs !== undefined) {
+      if (
+        typeof r.adCompleteDelayMs !== "number" ||
+        !Number.isFinite(r.adCompleteDelayMs) ||
+        r.adCompleteDelayMs < 0
+      ) {
+        throw new ConfigError("`adCompleteDelayMs` must be a non-negative number", {
+          slotId,
+          field: "adCompleteDelayMs",
+          value: r.adCompleteDelayMs,
+        });
+      }
+    }
+
     const validated: ValidatedSlotConfig = Object.freeze({
       mediaTypes,
       bidders,
@@ -422,6 +437,7 @@ export class ConfigRegistry {
       ...(refresh ? { refresh } : {}),
       ...(typeof r.eager === "boolean" ? { eager: r.eager } : {}),
       ...(typeof r.container === "string" ? { container: r.container } : {}),
+      ...(typeof r.adCompleteDelayMs === "number" ? { adCompleteDelayMs: r.adCompleteDelayMs } : {}),
     });
     this.store.set(slotId, validated);
     return validated;

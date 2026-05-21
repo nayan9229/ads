@@ -112,6 +112,7 @@ const FORWARDED_EVENTS = [
   "error",
   "refresh_cap_reached",
   "bidder_config",
+  "adComplete",
 ] as const;
 
 export interface PublicApi {
