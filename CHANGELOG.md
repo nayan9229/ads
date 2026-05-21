@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] — 2026-05-22
+
+### Features
+
+- **`adSkipped` lifecycle event** (D59) — fires when the user clicks the IMA skip button (`SKIPPED` event). Video-only. Does NOT emit `viewable` or `adComplete` — skip is early termination, not IAB-viewable engagement or natural completion. Payload: `{ slotId, mediaType: "video" }`. Added to `FORWARDED_EVENTS` (analytics beacon + NR sink). Named `adSkipped` consistent with `adRenderSuccess`/`adComplete` prefix pattern.
+
+### Bundle
+
+- gzipped `dist/pubads.mini.js`: 12.93 KB → 12.96 KB (+0.03 KB). Cap unchanged (30 KB gz); 17.04 KB headroom.
+
 ## [1.1.4](https://github.com/nayan9229/ads/compare/v1.1.3...v1.1.4) (2026-05-21)
 
 ### Docs
