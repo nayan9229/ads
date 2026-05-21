@@ -1,6 +1,32 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.4](https://github.com/nayan9229/ads/compare/v1.1.3...v1.1.4) (2026-05-21)
+
+### Docs
+
+* document adComplete callback in README (v1.1.3) ([b2b6a66](https://github.com/nayan9229/ads/commit/b2b6a66d792b57e70b2d129ee735cc241df98ed3))
+* **readme:** update test count to 244 tests, 53 suites ([a81cd61](https://github.com/nayan9229/ads/commit/a81cd61204bd3c2de03c9384feb3ef26a2c667c2))
+
+
+
+
+## Subresource Integrity
+
+```
+# Subresource Integrity hashes
+
+- `dist/pubads.mini.js` — `sha384-T5YSlxsPnt5rfZmJcWPIgYHeAyAjJ1kaC2h8jFkYNnNkboCaMNY37zq1qmnqWP9T`
+- `dist/pubads.mini.esm.js` — `sha384-aSfCTihyqPw0LJilApSSSo5c6xZL/bXl0mJmHUQmU6nWmSu7e7KsiIc6WW73FbHj`
+
+Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.
+```
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
