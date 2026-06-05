@@ -68,6 +68,14 @@ jobs:
         continue-on-error: true
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
-          curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@${PKG_VERSION}/dist/pubads.mini.js" || true
-          curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@1/dist/pubads.mini.js" || true
-          curl -sf "https://purge.jsdelivr.net/npm/@nayan9229/ads@latest/dist/pubads.mini.js" || true
+          MAJOR=${PKG_VERSION%%.*}
+          MINOR=${PKG_VERSION%.*}
+          # Consumers load via the GitHub source (/gh/, tag = v<version>), not /npm/
+          # (the package is on GitHub Packages, which jsDelivr does not serve). Purge
+          # every /gh/ alias — exact tag plus the moving latest/major/minor aliases —
+          # for both bundles, or @latest keeps serving a stale build.
+          for FILE in pubads.mini.js pubads.mini.esm.js; do
+            for REF in "v${PKG_VERSION}" "latest" "${MAJOR}" "${MINOR}"; do
+              curl -sf "https://purge.jsdelivr.net/gh/nayan9229/ads@${REF}/dist/${FILE}" || true
+            done
+          done
