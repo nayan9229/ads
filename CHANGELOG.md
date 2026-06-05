@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0](https://github.com/nayan9229/ads/compare/v1.1.5...v1.2.0) (2026-06-05)
+
+### Features
+
+* **bootstrap:** add registerSlot for Shadow DOM hosts ([76f53d1](https://github.com/nayan9229/ads/commit/76f53d1b8c3ef8a251f835822bff00059f17f4cd))
+
+
+
+
+## Subresource Integrity
+
+```
+# Subresource Integrity hashes
+
+- `dist/pubads.mini.js` — `sha384-POiu1TqKa4Zq1lXBcW0N09jMbAj5V0589sQ+lDZb6otBM1Ef7w8VjI5KTq8VbsPe`
+- `dist/pubads.mini.esm.js` — `sha384-DyT5T22H7uWWf/4BFUFCiSx64flsp8aNLTvOlNPBq4GxsiIdrXT6QKbHYDZxfJlS`
+
+Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.
+```
+
 ## [1.1.5] — 2026-05-22
 
 ### Features
