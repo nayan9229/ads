@@ -318,6 +318,91 @@ window.AdWrapper.destroy("my_slot_id");
 
 Payloads include `slotId`. Render events also include `adId`, `size`, `cpm`, `currency`, `cpmUsd`.
 
+### Shadow DOM hosts — `registerSlot(slotId, containerEl)`
+
+The default integration is a self-executing `<script>` tag per slot: the SDK finds its
+anchor via `document.currentScript` and injects the ad container as a sibling. That cannot
+work when the ad surface lives inside a **Shadow DOM** — `document.currentScript` is `null`
+for any `<script>` whose root is a shadow root (per the HTML spec), and a container built
+later inside a shadow tree is unreachable from `document.getElementById`.
+
+For these hosts, register the slot explicitly from your framework's mount hook, once the
+(open-rooted) container element exists:
+
+```js
+// host mount hook — open shadow root already attached:
+window.AdWrapperConfig = window.AdWrapperConfig || {};
+window.AdWrapperConfig["my_slot_id"] = {
+  mediaTypes: { banner: { sizes: [[300, 250]] } },
+  bidders: [{ bidder: "appnexus", params: { placementId: 123 } }],
+  eager: true,
+};
+
+const containerEl = shadowRoot.getElementById("ad-box"); // element inside the shadow root
+window.AdWrapper.registerSlot("my_slot_id", containerEl);
+```
+
+- `containerEl` is used directly as the ad surface — no ID lookup, no DOM traversal.
+- Treated as a **publisher-owned** surface: `destroy()` clears its contents, never removes it.
+- Idempotent — re-calling for the same `slotId` tears down the previous slot first (SPA-safe).
+- **Open shadow roots only.** The host must pass the element; the SDK cannot reach a `mode: "closed"` root.
+- Throws if `containerEl` is not an `HTMLElement`, or if no config exists for `slotId`.
+
+#### Migrating from the `position: fixed` workaround
+
+Before `registerSlot` existed, the only way to run a slot inside a Shadow DOM was to move the
+container out to the light DOM so `document.getElementById` could find it — appending it to
+`document.body` with `position: fixed` and absolute coordinates. That breaks layout, leaks the
+element on teardown, and fights the host's own styling. Replace it as follows.
+
+**Before — light-DOM escape hack:**
+
+```js
+// host mount hook (old workaround)
+const containerEl = document.createElement("div");
+containerEl.id = "ad-box";
+containerEl.style.position = "fixed";          // pulled OUT of the shadow root
+containerEl.style.top = "120px";
+containerEl.style.left = "0";
+document.body.appendChild(containerEl);          // so getElementById can see it
+
+window.AdWrapperConfig["my_slot_id"] = {
+  mediaTypes: { banner: { sizes: [[300, 250]] } },
+  bidders: [{ bidder: "appnexus", params: { placementId: 123 } }],
+  eager: true,
+  container: "ad-box",                           // resolved via document.getElementById
+};
+// slot booted by the auto-init <script> in the light DOM
+```
+
+**After — element lives in the shadow root, pushed in via `registerSlot`:**
+
+```js
+// host mount hook (new)
+const containerEl = document.createElement("div");
+containerEl.id = "ad-box";
+shadowRoot.appendChild(containerEl);             // stays INSIDE the shadow root, normal flow
+
+window.AdWrapperConfig["my_slot_id"] = {
+  mediaTypes: { banner: { sizes: [[300, 250]] } },
+  bidders: [{ bidder: "appnexus", params: { placementId: 123 } }],
+  eager: true,
+  // no `container` field — the element is handed in directly below
+};
+
+window.AdWrapper.registerSlot("my_slot_id", containerEl);
+```
+
+Migration checklist:
+
+1. Stop appending the container to `document.body`; build it where it belongs, inside the shadow root.
+2. Remove the `position: fixed` / `top` / `left` escape styles — the container renders in normal flow now.
+3. Drop the `container` (ID string) field from the slot config; pass the element to `registerSlot` instead.
+4. Drop the auto-init slot `<script>` for these slots — `registerSlot` boots the slot; you only need `window.AdWrapper` to exist (loaded once on the page).
+5. Wire `AdWrapper.destroy(slotId)` into your unmount hook (it clears the element's contents but leaves the element you own in place).
+
+No change for light-DOM slots — the auto-init `<script>` + `container` ID string path is unchanged.
+
 ---
 
 ## Defaults reference

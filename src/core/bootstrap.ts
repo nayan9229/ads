@@ -119,6 +119,14 @@ const FORWARDED_EVENTS = [
 export interface PublicApi {
   on(event: LifecycleEvent, fn: (payload: unknown) => void): Unsubscribe;
   registerScript(scriptEl: HTMLScriptElement): Promise<void>;
+  /**
+   * Register a slot with an explicit container element (D60). For hosts that mount
+   * ad surfaces inside a Shadow DOM, where `document.currentScript` auto-init (D6)
+   * cannot reach the slot. The host calls this from its framework mount hook, once
+   * the (open-rooted) container element exists. `containerEl` is treated as a
+   * publisher-owned surface (cleared, not removed, on destroy — per D53).
+   */
+  registerSlot(slotId: string, containerEl: HTMLElement): Promise<void>;
   destroy(slotId: string): void;
   destroyAll(): void;
 }
@@ -127,7 +135,7 @@ type FullPbjs = PrebidGlobal & PrebidAuctionApi & { renderAd(doc: Document, adId
 
 function validateSchain(raw: SupplyChainObject): void {
   if (raw.ver !== "1.0") {
-    throw new ConfigError("`schain.ver` must be \"1.0\"", { field: "schain.ver", value: raw.ver });
+    throw new ConfigError('`schain.ver` must be "1.0"', { field: "schain.ver", value: raw.ver });
   }
   if (raw.complete !== 0 && raw.complete !== 1) {
     throw new ConfigError("`schain.complete` must be 0 or 1", {
@@ -228,14 +236,14 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
 
   // identityResolver runtime preload — parallel with Prebid + IMA (D43-style sniff).
   // Banner-only pages with identityResolver disabled pay zero bytes.
-  let identityReadyPromise: Promise<import("./dependency-loader").IdentityResolverGlobal | null> | null =
-    null;
+  let identityReadyPromise: Promise<
+    import("./dependency-loader").IdentityResolverGlobal | null
+  > | null = null;
   function ensureIdentityResolverPreload(): Promise<
     import("./dependency-loader").IdentityResolverGlobal | null
   > {
     if (identityReadyPromise) return identityReadyPromise;
-    const load =
-      opts.identityResolverLoaderOverride ?? (() => loader.loadIdentityResolver());
+    const load = opts.identityResolverLoaderOverride ?? (() => loader.loadIdentityResolver());
     identityReadyPromise = load().catch((err: unknown) => {
       callbacks.emit("error", {
         code: "E_IDENTITY_LOAD_FAIL",
@@ -375,104 +383,129 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
     return pbjsCached;
   }
 
+  // Shared registration tail for both entry points: the auto-init `<script>` path
+  // (registerScript, D6) and the explicit host-driven path (registerSlot, D60).
+  // `surface.scriptEl` anchors sibling injection; `surface.explicitContainerEl` is a
+  // publisher-owned element handed in directly (Shadow-DOM hosts, D60) and bypasses
+  // the config.container string lookup (D53).
+  async function bootSlot(
+    slotId: string,
+    surface: { scriptEl: HTMLScriptElement | null; explicitContainerEl?: HTMLElement },
+  ): Promise<void> {
+    const globalConfig = (window as unknown as { AdWrapperConfig?: Record<string, unknown> })
+      .AdWrapperConfig;
+    const raw = globalConfig?.[slotId];
+    if (raw === undefined) {
+      throw new ConfigError("no config for slot", { slotId });
+    }
+
+    if (lifecycles.has(slotId)) {
+      api.destroy(slotId);
+    }
+
+    const config = configs.register(slotId, raw);
+
+    // Resolve the ad surface. An explicit element (registerSlot, D60) is a
+    // publisher-owned surface and skips the config.container string path (D53).
+    let resolvedContainerEl: HTMLElement | undefined = surface.explicitContainerEl;
+    if (resolvedContainerEl) {
+      publisherContainers.add(slotId);
+    } else if (config.container) {
+      const found = document.getElementById(config.container);
+      if (found) {
+        resolvedContainerEl = found;
+        publisherContainers.add(slotId);
+      } else {
+        callbacks.emit("error", {
+          code: "E_CONFIG_INVALID",
+          message: `container element "#${config.container}" not found for slot "${slotId}"; falling back to sibling injection`,
+          context: { slotId, field: "container", value: config.container },
+        });
+      }
+    }
+
+    // Reserved container size — banner-max only per D40. Video is constrained
+    // to whatever banner reserves; native uses 300x250 default if no banner.
+    let reserved: readonly [number, number] = [300, 250];
+    if (config.mediaTypes.banner) {
+      const innerWidth =
+        typeof window !== "undefined" && typeof window.innerWidth === "number"
+          ? window.innerWidth
+          : 0;
+      const resolved = resolveSizesForViewport(config.mediaTypes.banner.sizes, innerWidth);
+      if (resolved.length > 0) {
+        const maxW = Math.max(...resolved.map((s) => s[0]));
+        const maxH = Math.max(...resolved.map((s) => s[1]));
+        reserved = [maxW, maxH];
+      }
+    }
+    const container = injector.inject({
+      scriptEl: surface.scriptEl,
+      slotId,
+      reserved,
+      ...(resolvedContainerEl ? { containerEl: resolvedContainerEl } : {}),
+    });
+    containers.set(slotId, container);
+
+    const pbjs = await getPbjs();
+    const bannerRenderer = new BannerRenderer(pbjs, callbacks);
+    const nativeRenderer = new NativeRenderer(callbacks);
+
+    // Per-slot IMA-readiness gate (D47): if this slot declares mediaTypes.video,
+    // await the preloaded IMA promise (settles either way within timeout).
+    let videoRenderer: VideoRenderer | undefined;
+    let imaFailed = false;
+    if (config.mediaTypes.video) {
+      const ima = await ensureImaPreload();
+      if (ima) {
+        videoRenderer = new VideoRenderer(ima, callbacks);
+      } else {
+        imaFailed = true;
+      }
+    }
+    const lifecycle = new SlotLifecycle({
+      slotId,
+      config,
+      container,
+      callbacks,
+      bannerRenderer,
+      nativeRenderer,
+      ...(videoRenderer ? { videoRenderer } : {}),
+      pbjs,
+      orchestrator: orchestrator!,
+      retryDelaysMs: opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS,
+      isInView: () => true,
+      lazyLoadGate: new LazyLoadGate(),
+      viewabilityTracker: new ViewabilityTracker(),
+      ...(sharedConsentManager ? { consentManager: sharedConsentManager } : {}),
+      ...(currencyConverter ? { currencyConverter } : {}),
+      ...(environment === "webview" ? { suppressRefresh: true } : {}),
+    });
+
+    // D46: pre-auction strip — if IMA failed and slot has banner fallback,
+    // strip mediaTypes.video so the auction doesn't return un-renderable video bids.
+    if (imaFailed) lifecycle.stripMediaType("video");
+
+    lifecycles.set(slotId, lifecycle);
+    lifecycle.start();
+  }
+
   const api: PublicApi = {
     on: (event, fn) => callbacks.on(event, fn),
 
+    // Auto-init path (D6): self-executing `<script>` per slot, anchor = document.currentScript.
     async registerScript(scriptEl) {
-      const slotId = scriptEl.id;
-      const globalConfig = (window as unknown as { AdWrapperConfig?: Record<string, unknown> })
-        .AdWrapperConfig;
-      const raw = globalConfig?.[slotId];
-      if (raw === undefined) {
-        throw new ConfigError("no config for slot", { slotId });
+      await bootSlot(scriptEl.id, { scriptEl });
+    },
+
+    // Host-driven path (D60): Shadow-DOM hosts hand the container element in from a
+    // framework mount hook. `document.currentScript` is null inside shadow roots, so
+    // auto-init cannot serve these slots — the host pushes the element instead.
+    async registerSlot(slotId, containerEl) {
+      if (!(containerEl instanceof HTMLElement)) {
+        throw new TypeError(`registerSlot: containerEl must be an HTMLElement (slot "${slotId}")`);
       }
-
-      if (lifecycles.has(slotId)) {
-        api.destroy(slotId);
-      }
-
-      const config = configs.register(slotId, raw);
-
-      // Resolve explicit container (D53): publisher may supply an element ID in config.
-      let resolvedContainerEl: HTMLElement | undefined;
-      if (config.container) {
-        const found = document.getElementById(config.container);
-        if (found) {
-          resolvedContainerEl = found;
-          publisherContainers.add(slotId);
-        } else {
-          callbacks.emit("error", {
-            code: "E_CONFIG_INVALID",
-            message: `container element "#${config.container}" not found for slot "${slotId}"; falling back to sibling injection`,
-            context: { slotId, field: "container", value: config.container },
-          });
-        }
-      }
-
-      // Reserved container size — banner-max only per D40. Video is constrained
-      // to whatever banner reserves; native uses 300x250 default if no banner.
-      let reserved: readonly [number, number] = [300, 250];
-      if (config.mediaTypes.banner) {
-        const innerWidth =
-          typeof window !== "undefined" && typeof window.innerWidth === "number"
-            ? window.innerWidth
-            : 0;
-        const resolved = resolveSizesForViewport(config.mediaTypes.banner.sizes, innerWidth);
-        if (resolved.length > 0) {
-          const maxW = Math.max(...resolved.map((s) => s[0]));
-          const maxH = Math.max(...resolved.map((s) => s[1]));
-          reserved = [maxW, maxH];
-        }
-      }
-      const container = injector.inject({
-        scriptEl,
-        slotId,
-        reserved,
-        ...(resolvedContainerEl ? { containerEl: resolvedContainerEl } : {}),
-      });
-      containers.set(slotId, container);
-
-      const pbjs = await getPbjs();
-      const bannerRenderer = new BannerRenderer(pbjs, callbacks);
-      const nativeRenderer = new NativeRenderer(callbacks);
-
-      // Per-slot IMA-readiness gate (D47): if this slot declares mediaTypes.video,
-      // await the preloaded IMA promise (settles either way within timeout).
-      let videoRenderer: VideoRenderer | undefined;
-      let imaFailed = false;
-      if (config.mediaTypes.video) {
-        const ima = await ensureImaPreload();
-        if (ima) {
-          videoRenderer = new VideoRenderer(ima, callbacks);
-        } else {
-          imaFailed = true;
-        }
-      }
-      const lifecycle = new SlotLifecycle({
-        slotId,
-        config,
-        container,
-        callbacks,
-        bannerRenderer,
-        nativeRenderer,
-        ...(videoRenderer ? { videoRenderer } : {}),
-        pbjs,
-        orchestrator: orchestrator!,
-        retryDelaysMs: opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS,
-        isInView: () => true,
-        lazyLoadGate: new LazyLoadGate(),
-        viewabilityTracker: new ViewabilityTracker(),
-        ...(sharedConsentManager ? { consentManager: sharedConsentManager } : {}),
-        ...(currencyConverter ? { currencyConverter } : {}),
-        ...(environment === "webview" ? { suppressRefresh: true } : {}),
-      });
-
-      // D46: pre-auction strip — if IMA failed and slot has banner fallback,
-      // strip mediaTypes.video so the auction doesn't return un-renderable video bids.
-      if (imaFailed) lifecycle.stripMediaType("video");
-
-      lifecycles.set(slotId, lifecycle);
-      lifecycle.start();
+      await bootSlot(slotId, { scriptEl: null, explicitContainerEl: containerEl });
     },
 
     destroy(slotId) {
