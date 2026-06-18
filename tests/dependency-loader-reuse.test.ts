@@ -20,36 +20,37 @@ function makeIma(): ImaGlobal {
   } as unknown as ImaGlobal;
 }
 
-describe("DependencyLoader — pre-existing global reuse + warn (D45)", () => {
+describe("DependencyLoader — pre-existing global reuse + warn", () => {
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
     _resetReuseWarnState();
     document.head.innerHTML = "";
     delete (window as { pbjs?: unknown }).pbjs;
+    delete (window as { _adwPbjs?: unknown })._adwPbjs;
     delete (window as { google?: unknown }).google;
     warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => {
     warnSpy.mockRestore();
     delete (window as { pbjs?: unknown }).pbjs;
+    delete (window as { _adwPbjs?: unknown })._adwPbjs;
     delete (window as { google?: unknown }).google;
   });
 
-  it("reuses pre-existing window.pbjs and emits one console.warn", async () => {
-    const existing = makePbjs();
-    (window as unknown as { pbjs: PrebidGlobal }).pbjs = existing;
+  // D61/D62: Prebid is never reused from the host page; the SDK resolves its own
+  // inlined _adwPbjs. A host window.pbjs is ignored entirely.
+  it("never reuses a host window.pbjs — resolves its own inlined _adwPbjs (D62)", async () => {
+    const own = makePbjs();
+    (window as unknown as { pbjs: PrebidGlobal }).pbjs = makePbjs();
+    (window as unknown as { _adwPbjs: PrebidGlobal })._adwPbjs = own;
 
-    const loader = new DependencyLoader({
-      prebidSrc: "https://example.com/prebid.js",
-      timeoutMs: 1000,
-    });
+    const loader = new DependencyLoader({ timeoutMs: 1000 });
     const resolved = await loader.loadPrebid();
 
-    expect(resolved).toBe(existing);
-    expect(document.head.querySelector('script[src*="prebid"]')).toBeNull();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0]![0]).toMatch(/reusing pre-existing window\.pbjs/);
+    expect(resolved).toBe(own); // own inlined global, not the host's pbjs
+    expect(document.head.querySelector('script[src*="prebid"]')).toBeNull(); // no injection
+    expect(warnSpy).not.toHaveBeenCalled(); // no reuse warning
   });
 
   it("reuses pre-existing window.google.ima and emits one console.warn", async () => {
@@ -68,20 +69,6 @@ describe("DependencyLoader — pre-existing global reuse + warn (D45)", () => {
     expect(warnSpy.mock.calls[0]![0]).toMatch(/reusing pre-existing window\.google\.ima/);
   });
 
-  it("warns once across multiple loadPrebid() calls (module-level dedupe)", async () => {
-    (window as unknown as { pbjs: PrebidGlobal }).pbjs = makePbjs();
-
-    const loader = new DependencyLoader({
-      prebidSrc: "https://example.com/prebid.js",
-      timeoutMs: 1000,
-    });
-    await loader.loadPrebid();
-    await loader.loadPrebid();
-    await loader.loadPrebid();
-
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-  });
-
   it("warns once across multiple loadIMA() calls", async () => {
     (window as unknown as { google: { ima: ImaGlobal } }).google = { ima: makeIma() };
 
@@ -96,51 +83,36 @@ describe("DependencyLoader — pre-existing global reuse + warn (D45)", () => {
   });
 
   it("warns once even across separate DependencyLoader instances (module-scope state)", async () => {
-    (window as unknown as { pbjs: PrebidGlobal }).pbjs = makePbjs();
+    (window as unknown as { google: { ima: ImaGlobal } }).google = { ima: makeIma() };
 
     const a = new DependencyLoader({ prebidSrc: "https://example.com/p.js", timeoutMs: 1000 });
     const b = new DependencyLoader({ prebidSrc: "https://example.com/p.js", timeoutMs: 1000 });
-    await a.loadPrebid();
-    await b.loadPrebid();
+    await a.loadIMA();
+    await b.loadIMA();
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT warn when no pre-existing pbjs is on window (normal injection path)", () => {
+  it("does NOT warn when no pre-existing ima is on window (normal injection path)", () => {
     const loader = new DependencyLoader({
       prebidSrc: "https://example.com/prebid.js",
       timeoutMs: 1000,
     });
-    void loader.loadPrebid();
+    void loader.loadIMA();
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("does NOT warn when window.pbjs exists but has no `que` array (invalid pre-existing)", () => {
-    (window as unknown as { pbjs: Record<string, unknown> }).pbjs = { something: "else" };
-
-    const loader = new DependencyLoader({
-      prebidSrc: "https://example.com/prebid.js",
-      timeoutMs: 1000,
-    });
-    void loader.loadPrebid();
-
-    expect(warnSpy).not.toHaveBeenCalled();
-  });
-
-  it("pbjs warn and ima warn are independent (one does not silence the other)", async () => {
+  it("a host pbjs does not trigger any reuse warning, even alongside ima reuse", async () => {
     (window as unknown as { pbjs: PrebidGlobal }).pbjs = makePbjs();
+    (window as unknown as { _adwPbjs: PrebidGlobal })._adwPbjs = makePbjs();
     (window as unknown as { google: { ima: ImaGlobal } }).google = { ima: makeIma() };
 
-    const loader = new DependencyLoader({
-      prebidSrc: "https://example.com/prebid.js",
-      timeoutMs: 1000,
-    });
+    const loader = new DependencyLoader({ timeoutMs: 1000 });
     await loader.loadPrebid();
     await loader.loadIMA();
 
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    const msgs = warnSpy.mock.calls.map((c) => c[0] as string);
-    expect(msgs.some((m) => /window\.pbjs/.test(m))).toBe(true);
-    expect(msgs.some((m) => /window\.google\.ima/.test(m))).toBe(true);
+    // Only the IMA reuse warns; the host pbjs is ignored without comment.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]![0]).toMatch(/window\.google\.ima/);
   });
 });

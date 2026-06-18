@@ -47,6 +47,7 @@ describe("bootstrap — identity wiring", () => {
     jest.useRealTimers();
     uninstallIntersectionObserverStub();
     delete (window as { AdWrapper?: unknown }).AdWrapper;
+    delete (window as { pbjs?: unknown }).pbjs;
   });
 
   it("calls pbjs.setConfig with userSync.userIds when identity is configured", async () => {
@@ -80,6 +81,44 @@ describe("bootstrap — identity wiring", () => {
     const names = userSyncCall!.userSync!.userIds.map((u) => u.name);
     expect(names).toContain("sharedId");
     expect(names).toContain("id5Id");
+  });
+
+  it("suppresses our instance's syncs (syncEnabled:false) when a host pbjs is present (D61)", async () => {
+    // Host page already runs its own Prebid.
+    (window as unknown as { pbjs: { que: Array<() => void> } }).pbjs = { que: [] };
+
+    (window as unknown as { AdWrapperConfig: Record<string, unknown> }).AdWrapperConfig = {
+      slot_id: {
+        mediaTypes: { banner: { sizes: [[300, 250]] } },
+        bidders: [{ bidder: "appnexus", params: {} }],
+        eager: true,
+      },
+    };
+    const script = document.createElement("script");
+    script.id = "slot_id";
+    document.body.appendChild(script);
+
+    const api = bootstrap({
+      prebidSrc: "https://example.com/prebid.js",
+      prebidLoaderOverride: () => Promise.resolve(pbjs as unknown as PrebidGlobal),
+      consentDisabled: true,
+      identity: { id5PartnerId: 4242 },
+    });
+
+    const reg = api.registerScript(script);
+    await flush();
+    await reg;
+
+    const userSyncCalls = pbjs.setConfig.mock.calls
+      .map((c) => c[0])
+      .filter((c) => !!(c as { userSync?: unknown }).userSync) as Array<{
+      userSync: { syncEnabled?: boolean; userIds?: unknown };
+    }>;
+
+    // Exactly the suppression call — never a userIds push when host is present.
+    expect(userSyncCalls).toHaveLength(1);
+    expect(userSyncCalls[0]!.userSync.syncEnabled).toBe(false);
+    expect(userSyncCalls[0]!.userSync.userIds).toBeUndefined();
   });
 
   it("webview environment suppresses identity setConfig even when identity is configured", async () => {

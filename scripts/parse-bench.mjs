@@ -3,7 +3,11 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import vm from "node:vm";
 
-const BUNDLE = "dist/pubads.mini.js";
+// Guards the SDK core's parse time, NOT the final mini bundle (D62): the inlined
+// Prebid artifact dominates mini.js (~87%) and changes only on a deliberate
+// Prebid bump, so measuring it would both fail on every bump and mask
+// regressions in our own code. Prebid's payload is bounded by the size budget.
+const BUNDLE = "dist/pubads.core.js";
 const BASELINE = "scripts/parse-bench-baseline.json";
 const ITERATIONS = 50;
 const REGRESSION_THRESHOLD = 1.15; // +15% fails

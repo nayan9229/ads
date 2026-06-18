@@ -47,7 +47,14 @@ export interface IdentityResolverConfig {
 }
 
 export interface BootstrapOptions {
-  readonly prebidSrc: string;
+  /**
+   * Optional override URL for an external renamed-global Prebid build (D62).
+   * Normally omitted — Prebid is inlined into the SDK bundle. Supply only to
+   * point at your own externally-hosted renamed-global build.
+   */
+  readonly prebidSrc?: string;
+  /** Global var name the SDK's renamed Prebid build exposes (D61). Defaults to `_adwPbjs`. */
+  readonly prebidGlobalVarName?: string;
   readonly timeoutMs?: number;
   readonly prebidLoaderOverride?: () => Promise<PrebidGlobal>;
   readonly imaLoaderOverride?: () => Promise<import("./dependency-loader").ImaGlobal>;
@@ -180,7 +187,10 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
   });
   const injector = new DomInjector();
   const loader = new DependencyLoader({
-    prebidSrc: opts.prebidSrc,
+    ...(opts.prebidSrc !== undefined ? { prebidSrc: opts.prebidSrc } : {}),
+    ...(opts.prebidGlobalVarName !== undefined
+      ? { prebidGlobalVarName: opts.prebidGlobalVarName }
+      : {}),
     timeoutMs: opts.timeoutMs ?? 5000,
     ...(opts.cspNonce !== undefined ? { nonce: opts.cspNonce } : {}),
   });
@@ -359,6 +369,15 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       pbjsCached,
       opts.identityResolver?.enabled === true ? buildSignalProvider() : undefined,
     );
+    // Sync isolation (D61): the renamed global isolates the JS API but NOT
+    // network/cookie side effects. If the host page runs its own Prebid (only
+    // possible source of window.pbjs now that our build writes window._adwPbjs),
+    // suppress our instance's user-sync pixels + cookie syncs and defer identity
+    // to the host, so we don't double-fire syncs on the publisher's page.
+    const hostPrebidPresent =
+      typeof window !== "undefined" &&
+      Array.isArray((window as unknown as { pbjs?: { que?: unknown } }).pbjs?.que);
+
     const setConfig = (pbjsCached as unknown as SetConfigCapable).setConfig;
     if (typeof setConfig === "function") {
       if (opts.prebidConfig && Object.keys(opts.prebidConfig).length > 0) {
@@ -373,7 +392,9 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       if (opts.ortb2 && Object.keys(opts.ortb2).length > 0) {
         setConfig.call(pbjsCached, { ortb2: opts.ortb2 });
       }
-      if (identityResolver) {
+      if (hostPrebidPresent) {
+        setConfig.call(pbjsCached, { userSync: { syncEnabled: false } });
+      } else if (identityResolver) {
         const userIds = identityResolver.buildUserIdsConfig({ blocked: false });
         if (userIds.length > 0) {
           setConfig.call(pbjsCached, { userSync: { userIds } });

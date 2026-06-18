@@ -6,7 +6,11 @@ describe("DependencyLoader", () => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     delete (window as { pbjs?: unknown }).pbjs;
+    delete (window as { _adwPbjs?: unknown })._adwPbjs;
     delete (window as { google?: unknown }).google;
+  });
+  afterEach(() => {
+    delete (window as { _adwPbjs?: unknown })._adwPbjs;
   });
 
   it("loadPrebid injects a <script> tag with the configured src and resolves on onload", async () => {
@@ -23,7 +27,7 @@ describe("DependencyLoader", () => {
     expect(scriptTag).not.toBeNull();
     expect(scriptTag!.async).toBe(true);
 
-    (window as { pbjs?: { que: Array<() => void> } }).pbjs = { que: [] };
+    (window as { _adwPbjs?: { que: Array<() => void> } })._adwPbjs = { que: [] };
     scriptTag!.onload?.(new Event("load"));
 
     await expect(promise).resolves.toBeDefined();
@@ -46,10 +50,69 @@ describe("DependencyLoader", () => {
     const scriptTag = document.querySelector(
       'script[src="https://example.com/prebid.js"]',
     ) as HTMLScriptElement;
-    (window as { pbjs?: { que: Array<() => void> } }).pbjs = { que: [] };
+    (window as { _adwPbjs?: { que: Array<() => void> } })._adwPbjs = { que: [] };
     scriptTag.onload?.(new Event("load"));
 
     await expect(p1).resolves.toBeDefined();
+  });
+
+  it("reads the configured prebidGlobalVarName instead of window.pbjs", async () => {
+    const loader = new DependencyLoader({
+      prebidSrc: "https://example.com/prebid.js",
+      prebidGlobalVarName: "_customPbjs",
+      timeoutMs: 5000,
+    });
+
+    const promise = loader.loadPrebid();
+    const scriptTag = document.querySelector(
+      'script[src="https://example.com/prebid.js"]',
+    ) as HTMLScriptElement;
+
+    const fake = { que: [] };
+    (window as unknown as Record<string, unknown>)._customPbjs = fake;
+    scriptTag.onload?.(new Event("load"));
+
+    await expect(promise).resolves.toBe(fake);
+    delete (window as unknown as Record<string, unknown>)._customPbjs;
+  });
+
+  it("resolves the inlined _adwPbjs synchronously, never the host window.pbjs (D62)", async () => {
+    const own = { que: [], tag: "own" };
+    const host = { que: [], tag: "host" };
+    (window as unknown as Record<string, unknown>)._adwPbjs = own;
+    (window as unknown as Record<string, unknown>).pbjs = host;
+
+    // No prebidSrc — inlined path.
+    const loader = new DependencyLoader({ timeoutMs: 5000 });
+    const resolved = await loader.loadPrebid();
+
+    expect(resolved).toBe(own);
+    expect(resolved).not.toBe(host);
+    // No script injected — the global was already present.
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("rejects when _adwPbjs is absent and no prebidSrc override is supplied (D62)", async () => {
+    const loader = new DependencyLoader({ timeoutMs: 5000 });
+    await expect(loader.loadPrebid()).rejects.toMatchObject({
+      code: ErrorCode.E_PREBID_LOAD_FAIL,
+    });
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("falls back to injecting from prebidSrc when the global is absent (override path)", async () => {
+    const loader = new DependencyLoader({
+      prebidSrc: "https://example.com/prebid.js",
+      timeoutMs: 5000,
+    });
+    const promise = loader.loadPrebid();
+    const scriptTag = document.querySelector(
+      'script[src="https://example.com/prebid.js"]',
+    ) as HTMLScriptElement;
+    expect(scriptTag).not.toBeNull();
+    (window as { _adwPbjs?: { que: Array<() => void> } })._adwPbjs = { que: [] };
+    scriptTag.onload?.(new Event("load"));
+    await expect(promise).resolves.toBeDefined();
   });
 
   it("propagates `nonce` option to the injected <script> tag", () => {

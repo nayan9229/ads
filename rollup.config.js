@@ -23,17 +23,19 @@ const plugins = [
     compress: { passes: 2 },
     format: {
       // Strip every comment EXCEPT the leading legal banner (/*! ... */).
-      comments: (_node, comment) =>
-        comment.type === "comment2" && /^\s*!/.test(comment.value),
+      comments: (_node, comment) => comment.type === "comment2" && /^\s*!/.test(comment.value),
     },
   }),
 ];
 
 export default [
+  // SDK core only. The vendored renamed-global Prebid build (D62/ADR-0005) is
+  // concatenated ahead of these by scripts/inline-prebid.mjs to produce the
+  // final shipped dist/pubads.mini.* files. Core is size-gated at 30 KB gz.
   {
     input: "src/index.ts",
     output: {
-      file: "dist/pubads.mini.js",
+      file: "dist/pubads.core.js",
       format: "iife",
       name: "AdWrapperBundle",
       sourcemap: true,
@@ -44,7 +46,7 @@ export default [
   {
     input: "src/index.ts",
     output: {
-      file: "dist/pubads.mini.esm.js",
+      file: "dist/pubads.core.esm.js",
       format: "esm",
       sourcemap: true,
       banner,

@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/", "coverage/", "node_modules/", "test-page/mock-adapter.js"],
+    ignores: ["dist/", "coverage/", "node_modules/", "vendor/", "test-page/mock-adapter.js"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

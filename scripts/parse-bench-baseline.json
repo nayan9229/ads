@@ -1,8 +1,8 @@
 {
-  "bundle": "dist/pubads.mini.js",
-  "bytes": 39976,
+  "bundle": "dist/pubads.core.js",
+  "bytes": 47676,
   "iterations": 50,
   "median_ms": 0.001,
   "mean_ms": 0.001,
-  "p95_ms": 0.004
+  "p95_ms": 0.003
 }

@@ -4,8 +4,24 @@ export const DEFAULT_IMA_SRC = "https://imasdk.googleapis.com/js/sdkloader/ima3.
 export const DEFAULT_IDENTITY_RESOLVER_SRC =
   "https://cdn.jsdelivr.net/gh/nayan9229/identity-resolver@1.0.8/dist/index.umd.js";
 
+/**
+ * Global var name the SDK's own Prebid build writes itself to (D61/D62). The
+ * vendored bundle is built with Prebid's `package.json` `globalVarName` set to
+ * `_adwPbjs` (Prebid 9 has no `--prebidGlobalVarName` CLI flag — the name is read
+ * from package.json), so it never touches the host page's `window.pbjs`. The
+ * loader reads this global instead of `window.pbjs`.
+ */
+export const DEFAULT_PREBID_GLOBAL_VAR = "_adwPbjs";
+
 export interface DependencyLoaderOptions {
-  readonly prebidSrc: string;
+  /**
+   * Override URL for an external renamed-global Prebid build (D62). Normally
+   * omitted: Prebid is inlined into the SDK bundle and `loadPrebid` resolves the
+   * already-present global. Only used as a fallback when the global is absent.
+   */
+  readonly prebidSrc?: string;
+  /** Global var name the renamed Prebid build exposes (D61). Defaults to `_adwPbjs`. */
+  readonly prebidGlobalVarName?: string;
   readonly imaSrc?: string;
   readonly identityResolverSrc?: string;
   readonly timeoutMs: number;
@@ -33,17 +49,14 @@ export interface ImaGlobal {
   [k: string]: unknown;
 }
 
-let preExistingPbjsWarned = false;
 let preExistingImaWarned = false;
 let preExistingIdentityResolverWarned = false;
 
-function warnReuse(scope: "pbjs" | "ima" | "identityResolver"): void {
-  if (scope === "pbjs" && !preExistingPbjsWarned) {
-    preExistingPbjsWarned = true;
-    console.warn(
-      "[AdWrapper] reusing pre-existing window.pbjs — confirm the host page's Prebid build includes the bidders + modules this SDK expects.",
-    );
-  }
+// NOTE: Prebid is intentionally NOT reused from the host page (D61). The SDK
+// always self-loads its own renamed-global instance so its required adapters
+// (PubMatic, Magnite/rubicon) are guaranteed present. IMA + identity-resolver
+// remain shared single-instance globals and are still reused below.
+function warnReuse(scope: "ima" | "identityResolver"): void {
   if (scope === "ima" && !preExistingImaWarned) {
     preExistingImaWarned = true;
     console.warn(
@@ -116,9 +129,13 @@ export class DependencyLoader {
       script.onerror = () => {
         window.clearTimeout(timeout);
         reject(
-          new WrapperError(ErrorCode.E_IDENTITY_LOAD_FAIL, "identity-resolver script onerror fired", {
-            src,
-          }),
+          new WrapperError(
+            ErrorCode.E_IDENTITY_LOAD_FAIL,
+            "identity-resolver script onerror fired",
+            {
+              src,
+            },
+          ),
         );
       };
 
@@ -188,17 +205,40 @@ export class DependencyLoader {
   loadPrebid(): Promise<PrebidGlobal> {
     if (this.prebidPromise) return this.prebidPromise;
 
-    const existing = (window as unknown as { pbjs?: PrebidGlobal }).pbjs;
-    if (existing && Array.isArray(existing.que)) {
-      warnReuse("pbjs");
-      this.prebidPromise = Promise.resolve(existing);
+    // Our own renamed global (default `_adwPbjs`, D61). Never the host's
+    // window.pbjs — reusing that meant the host build often lacked our required
+    // adapters (PubMatic, Magnite/rubicon) → "adapter not found" at auction.
+    const globalVarName = this.opts.prebidGlobalVarName ?? DEFAULT_PREBID_GLOBAL_VAR;
+    const win = window as unknown as Record<string, PrebidGlobal | undefined>;
+
+    // Inlined path (D62): the vendored Prebid IIFE is concatenated ahead of this
+    // bundle and self-executes, so the global is already present. Resolve it
+    // synchronously — no script injection.
+    const inlined = win[globalVarName];
+    if (inlined && Array.isArray(inlined.que)) {
+      this.prebidPromise = Promise.resolve(inlined);
       return this.prebidPromise;
     }
 
+    // Fallback: external renamed-global build via `prebidSrc` override (D44).
+    if (this.opts.prebidSrc === undefined) {
+      this.prebidPromise = Promise.reject(
+        new WrapperError(
+          ErrorCode.E_PREBID_LOAD_FAIL,
+          `window.${globalVarName} not present (inlined Prebid missing) and no prebidSrc override supplied`,
+          { globalVarName },
+        ),
+      );
+      // Avoid an unhandled-rejection warning if no one awaits immediately.
+      this.prebidPromise.catch(() => {});
+      return this.prebidPromise;
+    }
+
+    const prebidSrc = this.opts.prebidSrc;
     this.prebidPromise = new Promise<PrebidGlobal>((resolve, reject) => {
       const script = document.createElement("script");
       script.async = true;
-      script.src = this.opts.prebidSrc;
+      script.src = prebidSrc;
       if (this.opts.nonce !== undefined) {
         script.setAttribute("nonce", this.opts.nonce);
       }
@@ -208,20 +248,20 @@ export class DependencyLoader {
           new WrapperError(
             ErrorCode.E_PREBID_LOAD_FAIL,
             `Prebid load timed out after ${this.opts.timeoutMs}ms`,
-            { src: this.opts.prebidSrc },
+            { src: prebidSrc },
           ),
         );
       }, this.opts.timeoutMs);
 
       script.onload = () => {
         window.clearTimeout(timeout);
-        const pbjs = (window as { pbjs?: PrebidGlobal }).pbjs;
+        const pbjs = (window as unknown as Record<string, PrebidGlobal | undefined>)[globalVarName];
         if (!pbjs) {
           reject(
             new WrapperError(
               ErrorCode.E_PREBID_LOAD_FAIL,
-              "window.pbjs missing after script load",
-              { src: this.opts.prebidSrc },
+              `window.${globalVarName} missing after script load`,
+              { src: prebidSrc, globalVarName },
             ),
           );
           return;
@@ -233,7 +273,7 @@ export class DependencyLoader {
         window.clearTimeout(timeout);
         reject(
           new WrapperError(ErrorCode.E_PREBID_LOAD_FAIL, "Prebid script onerror fired", {
-            src: this.opts.prebidSrc,
+            src: prebidSrc,
           }),
         );
       };
@@ -247,7 +287,6 @@ export class DependencyLoader {
 
 // Exposed for tests that need a fresh module-level reuse-warn state.
 export function _resetReuseWarnState(): void {
-  preExistingPbjsWarned = false;
   preExistingImaWarned = false;
   preExistingIdentityResolverWarned = false;
 }

@@ -1,6 +1,7 @@
 dist/
 coverage/
 node_modules/
+vendor/
 package-lock.json
 test-results/
 playwright-report/

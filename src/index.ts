@@ -10,20 +10,18 @@ declare global {
   }
 }
 
-const DEFAULT_PREBID_SRC =
-  "https://cdn.jsdelivr.net/npm/prebid.js@latest/dist/not-for-prod/prebid.js";
+// The SDK-owned, pinned, renamed-global Prebid build (D62) is INLINED into this
+// bundle (vendored artifact concatenated ahead of this code by
+// scripts/inline-prebid.mjs). It self-executes and writes window._adwPbjs before
+// init() runs, so there is no Prebid URL to load by default — `loadPrebid`
+// resolves the already-present global. The host page's window.pbjs is never
+// reused (D61). Publishers may still point at an external renamed-global build
+// via window.AdWrapperOptions.prebidSrc (override fallback, D44).
 
 function init(): void {
-  const preLoaded = window.pbjs;
   const overrides = window.AdWrapperOptions ?? {};
 
-  const api =
-    window.AdWrapper ??
-    bootstrap({
-      prebidSrc: DEFAULT_PREBID_SRC,
-      ...(preLoaded ? { prebidLoaderOverride: () => Promise.resolve(preLoaded) } : {}),
-      ...overrides,
-    });
+  const api = window.AdWrapper ?? bootstrap({ ...overrides });
 
   const me = document.currentScript as HTMLScriptElement | null;
   if (me && me.id) {
