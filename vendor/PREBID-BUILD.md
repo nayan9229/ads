@@ -9,18 +9,19 @@ This directory holds a **pre-built, renamed-global Prebid.js bundle** that is co
 | File | `prebid-adw-9.53.5.js` |
 | Prebid version (pinned tag) | `9.53.5` |
 | Global var name | `_adwPbjs` (not `pbjs`) |
-| Built | 2026-06-18 |
-| SRI | `sha384-Oho0X141JfTWRNqNZtfd2ybqTVHF3krkWNkHz+HtrCxNfzfmyB+/qC/CLSaQRwzJ` |
-| Size | 315.8 KB raw / 108.5 KB gz |
+| Built | 2026-07-01 |
+| SRI | `sha384-MmyWbJzhPleWejkj8vzaxedVxMXoQi0FXTzeHxTok41BHUtFAQyHj4Q9cqvgHIW9` |
+| Size | 329.2 KB raw / 113.3 KB gz |
 
-### Modules baked in (lean-correct set, D62)
+### Modules baked in (lean-correct set, D62 + D63)
 
 Bidders (D8): `appnexusBidAdapter`, `rubiconBidAdapter` (Magnite), `ixBidAdapter`, `openxBidAdapter`, `pubmaticBidAdapter`, `tripleliftBidAdapter`
 Identity (D18): `userId` + `sharedIdSystem`, `id5IdSystem`, `uid2IdSystem`
 Consent: `consentManagementTcf`, `consentManagementUsp`, `tcfControl`
 Currency: `currency`
+Floors (D63): `priceFloors` — makes `prebidConfig.floors` emit `imp.bidfloor` (without it, adapters send `bidfloorcur` but no `bidfloor`)
 
-**Deliberately excluded:** `dfpAdServerVideo` (no GAM — D9; `VideoRenderer` feeds `vastUrl`/`vastXml` straight to IMA) and `priceFloors` (static config floors only — D10).
+**Deliberately excluded:** `dfpAdServerVideo` (no GAM — D9; `VideoRenderer` feeds `vastUrl`/`vastXml` straight to IMA). (`priceFloors` was excluded under D10 — **re-added by D63**, see [ADR-0006](../docs/adr/0006-add-pricefloors-module.md).)
 
 ## How to rebuild (on Prebid bump — advisory or quarterly, D62)
 
@@ -31,7 +32,7 @@ git clone --depth 1 --branch <NEW_TAG> https://github.com/prebid/Prebid.js.git
 cd Prebid.js
 node -e "const fs=require('fs');const p=require('./package.json');p.globalVarName='_adwPbjs';fs.writeFileSync('./package.json',JSON.stringify(p,null,2)+'\n')"
 npm ci --no-audit --no-fund
-npx gulp build --modules=appnexusBidAdapter,rubiconBidAdapter,ixBidAdapter,openxBidAdapter,pubmaticBidAdapter,tripleliftBidAdapter,sharedIdSystem,id5IdSystem,uid2IdSystem,consentManagementTcf,consentManagementUsp,tcfControl,currency
+npx gulp build --modules=appnexusBidAdapter,rubiconBidAdapter,ixBidAdapter,openxBidAdapter,pubmaticBidAdapter,tripleliftBidAdapter,sharedIdSystem,id5IdSystem,uid2IdSystem,consentManagementTcf,consentManagementUsp,tcfControl,currency,priceFloors
 # → build/dist/prebid.js
 ```
 
