@@ -25,11 +25,13 @@ export type BannerSizes = ReadonlyArray<AdSize> | BreakpointSizes;
 export interface BannerMediaType {
   readonly sizes: BannerSizes;
   readonly shrinkToAdSize?: boolean;
+  readonly refresh?: RefreshConfig;
 }
 
 export interface NativeMediaType {
   readonly template: string;
   readonly requiredAssets: ReadonlyArray<string>;
+  readonly refresh?: RefreshConfig;
 }
 
 export interface VideoMediaType {
@@ -44,6 +46,7 @@ export interface VideoMediaType {
   readonly linearity: 1 | 2;
   readonly vastTimeoutMs?: number;
   readonly allowSkip?: boolean;
+  readonly refresh?: RefreshConfig;
 }
 
 export interface MediaTypes {
@@ -57,7 +60,6 @@ export interface ValidatedSlotConfig {
   readonly bidders: ReadonlyArray<BidderConfig>;
   readonly fallback?: FallbackImageConfig;
   readonly eager?: boolean;
-  readonly refresh?: RefreshConfig;
   readonly container?: string;
   readonly adCompleteDelayMs?: number;
 }
@@ -79,31 +81,32 @@ function validateRefresh(
   raw: unknown,
   slotId: string,
   minSec: number = MIN_REFRESH_SEC,
+  field = "refresh",
 ): RefreshConfig | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== "object") {
-    throw new ConfigError("`refresh` must be an object", { slotId, field: "refresh" });
+    throw new ConfigError(`\`${field}\` must be an object`, { slotId, field });
   }
   const r = raw as Record<string, unknown>;
   if (typeof r.intervalSec !== "number" || !Number.isFinite(r.intervalSec)) {
-    throw new ConfigError("`refresh.intervalSec` must be a number", {
+    throw new ConfigError(`\`${field}.intervalSec\` must be a number`, {
       slotId,
-      field: "refresh.intervalSec",
+      field: `${field}.intervalSec`,
       value: r.intervalSec,
     });
   }
   if (r.intervalSec < minSec) {
-    throw new ConfigError(`\`refresh.intervalSec\` must be >= ${minSec}`, {
+    throw new ConfigError(`\`${field}.intervalSec\` must be >= ${minSec}`, {
       slotId,
-      field: "refresh.intervalSec",
+      field: `${field}.intervalSec`,
       value: r.intervalSec,
     });
   }
   if (r.sessionCap !== undefined) {
     if (typeof r.sessionCap !== "number" || r.sessionCap < 1) {
-      throw new ConfigError("`refresh.sessionCap` must be a number >= 1", {
+      throw new ConfigError(`\`${field}.sessionCap\` must be a number >= 1`, {
         slotId,
-        field: "refresh.sessionCap",
+        field: `${field}.sessionCap`,
         value: r.sessionCap,
       });
     }
@@ -245,7 +248,7 @@ function validateSizes(
   );
 }
 
-function validateBannerMediaType(raw: unknown, slotId: string): BannerMediaType {
+function validateBannerMediaType(raw: unknown, slotId: string, minSec?: number): BannerMediaType {
   if (raw === null || typeof raw !== "object") {
     throw new ConfigError("`mediaTypes.banner` must be an object", {
       slotId,
@@ -261,13 +264,15 @@ function validateBannerMediaType(raw: unknown, slotId: string): BannerMediaType 
       value: b.shrinkToAdSize,
     });
   }
+  const refresh = validateRefresh(b.refresh, slotId, minSec, "mediaTypes.banner.refresh");
   return Object.freeze({
     sizes,
     ...(typeof b.shrinkToAdSize === "boolean" ? { shrinkToAdSize: b.shrinkToAdSize } : {}),
+    ...(refresh ? { refresh } : {}),
   });
 }
 
-function validateNativeMediaType(raw: unknown, slotId: string): NativeMediaType {
+function validateNativeMediaType(raw: unknown, slotId: string, minSec?: number): NativeMediaType {
   if (raw === null || typeof raw !== "object") {
     throw new ConfigError("`mediaTypes.native` must be an object", {
       slotId,
@@ -287,13 +292,15 @@ function validateNativeMediaType(raw: unknown, slotId: string): NativeMediaType 
       field: "mediaTypes.native.requiredAssets",
     });
   }
+  const refresh = validateRefresh(n.refresh, slotId, minSec, "mediaTypes.native.refresh");
   return Object.freeze({
     template: n.template,
     requiredAssets: Object.freeze([...(n.requiredAssets as string[])]),
+    ...(refresh ? { refresh } : {}),
   });
 }
 
-function validateVideoMediaType(raw: unknown, slotId: string): VideoMediaType {
+function validateVideoMediaType(raw: unknown, slotId: string, minSec?: number): VideoMediaType {
   if (raw === null || typeof raw !== "object") {
     throw new ConfigError("`mediaTypes.video` must be an object", {
       slotId,
@@ -329,6 +336,7 @@ function validateVideoMediaType(raw: unknown, slotId: string): VideoMediaType {
       value: v.allowSkip,
     });
   }
+  const refresh = validateRefresh(v.refresh, slotId, minSec, "mediaTypes.video.refresh");
   return Object.freeze({
     ...(v.context !== undefined ? { context: v.context as "instream" | "outstream" } : {}),
     ...(v.playerSize !== undefined
@@ -349,18 +357,19 @@ function validateVideoMediaType(raw: unknown, slotId: string): VideoMediaType {
     linearity: v.linearity === 2 ? 2 : 1,
     ...(typeof v.vastTimeoutMs === "number" ? { vastTimeoutMs: v.vastTimeoutMs } : {}),
     ...(typeof v.allowSkip === "boolean" ? { allowSkip: v.allowSkip } : {}),
+    ...(refresh ? { refresh } : {}),
   });
 }
 
-function validateMediaTypes(raw: unknown, slotId: string): MediaTypes {
+function validateMediaTypes(raw: unknown, slotId: string, minSec?: number): MediaTypes {
   if (raw === null || typeof raw !== "object") {
     throw new ConfigError("`mediaTypes` must be an object", { slotId, field: "mediaTypes" });
   }
   const m = raw as Record<string, unknown>;
   const out: { -readonly [K in keyof MediaTypes]: MediaTypes[K] } = {};
-  if (m.banner !== undefined) out.banner = validateBannerMediaType(m.banner, slotId);
-  if (m.native !== undefined) out.native = validateNativeMediaType(m.native, slotId);
-  if (m.video !== undefined) out.video = validateVideoMediaType(m.video, slotId);
+  if (m.banner !== undefined) out.banner = validateBannerMediaType(m.banner, slotId, minSec);
+  if (m.native !== undefined) out.native = validateNativeMediaType(m.native, slotId, minSec);
+  if (m.video !== undefined) out.video = validateVideoMediaType(m.video, slotId, minSec);
   if (!out.banner && !out.native && !out.video) {
     throw new ConfigError(
       "`mediaTypes` must declare at least one of `banner`, `native`, or `video`",
@@ -389,14 +398,13 @@ export class ConfigRegistry {
     }
     const r = raw as Record<string, unknown>;
 
-    const mediaTypes = validateMediaTypes(r.mediaTypes, slotId);
+    const mediaTypes = validateMediaTypes(r.mediaTypes, slotId, this.opts.minRefreshIntervalSec);
 
     const bidders = validateBidders(r.bidders, slotId).map((b) =>
       Object.freeze({ bidder: b.bidder, params: Object.freeze({ ...b.params }) }),
     );
 
     const fallback = validateFallback(r.fallback, slotId);
-    const refresh = validateRefresh(r.refresh, slotId, this.opts.minRefreshIntervalSec);
 
     if (r.eager !== undefined && typeof r.eager !== "boolean") {
       throw new ConfigError("`eager` must be a boolean", {
@@ -434,7 +442,6 @@ export class ConfigRegistry {
       mediaTypes,
       bidders,
       ...(fallback ? { fallback } : {}),
-      ...(refresh ? { refresh } : {}),
       ...(typeof r.eager === "boolean" ? { eager: r.eager } : {}),
       ...(typeof r.container === "string" ? { container: r.container } : {}),
       ...(typeof r.adCompleteDelayMs === "number" ? { adCompleteDelayMs: r.adCompleteDelayMs } : {}),

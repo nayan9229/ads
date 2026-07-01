@@ -178,10 +178,9 @@ describe("adComplete — banner timer with refresh", () => {
     const pbjs = makePbjs();
     const callbacks = new CallbackRegistry(new ErrorRegistry());
     const config = new ConfigRegistry({ minRefreshIntervalSec: 1 }).register("slot_ac_mid", {
-      mediaTypes: { banner: { sizes: [[300, 250]] } },
+      mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 1, sessionCap: 2 } } },
       bidders: [{ bidder: "appnexus", params: {} }],
       eager: true,
-      refresh: { intervalSec: 1, sessionCap: 2 },
     });
 
     const seen: unknown[] = [];
@@ -211,10 +210,9 @@ describe("adComplete — banner timer with refresh", () => {
     const pbjs = makePbjs();
     const callbacks = new CallbackRegistry(new ErrorRegistry());
     const config = new ConfigRegistry({ minRefreshIntervalSec: 1 }).register("slot_ac_cap", {
-      mediaTypes: { banner: { sizes: [[300, 250]] } },
+      mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 1, sessionCap: 2 } } },
       bidders: [{ bidder: "appnexus", params: {} }],
       eager: true,
-      refresh: { intervalSec: 1, sessionCap: 2 },
     });
 
     const seen: unknown[] = [];
@@ -248,10 +246,9 @@ describe("adComplete — banner timer with refresh", () => {
     const pbjs = makePbjs();
     const callbacks = new CallbackRegistry(new ErrorRegistry());
     const config = new ConfigRegistry({ minRefreshIntervalSec: 1 }).register("slot_ac_nocap", {
-      mediaTypes: { banner: { sizes: [[300, 250]] } },
+      mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 1 } } },
       bidders: [{ bidder: "appnexus", params: {} }],
       eager: true,
-      refresh: { intervalSec: 1 },
     });
 
     const seen: unknown[] = [];

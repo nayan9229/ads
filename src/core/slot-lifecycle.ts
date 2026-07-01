@@ -1,5 +1,5 @@
 import { CallbackRegistry } from "./callback-registry";
-import { AdSize, ValidatedSlotConfig } from "./config-registry";
+import { AdSize, RefreshConfig, ValidatedSlotConfig } from "./config-registry";
 import { BannerRenderer, PrebidBid, PrebidRenderApi } from "../renderers/banner-renderer";
 import { NativeBid, NativeRenderer } from "../renderers/native-renderer";
 import { VideoBid, VideoRenderer } from "../renderers/video-renderer";
@@ -56,6 +56,10 @@ export class SlotLifecycle {
   private viewabilityAborted = false;
   private adCompleteTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshCapReached = false;
+  // Which mediaType rendered the current impression. Drives refresh cadence
+  // (D64: per-mediaType refresh — the rendered type wins, re-evaluated each
+  // impression) and whether adComplete is scheduled.
+  private renderedMediaType: "banner" | "video" | "native" | null = null;
 
   constructor(private readonly deps: SlotLifecycleDeps) {}
 
@@ -113,8 +117,15 @@ export class SlotLifecycle {
     this.deps.callbacks.emit("destroy", { slotId: this.deps.slotId });
   }
 
+  // Refresh config for the mediaType that rendered the current impression
+  // (D64). Null before the first render, or when that mediaType opts out.
+  private refreshForRenderedMediaType(): RefreshConfig | undefined {
+    if (!this.renderedMediaType) return undefined;
+    return this.deps.config.mediaTypes[this.renderedMediaType]?.refresh;
+  }
+
   private scheduleAdComplete(): void {
-    if (this.deps.config.refresh && !this.refreshCapReached) return;
+    if (this.refreshForRenderedMediaType() && !this.refreshCapReached) return;
     if (this.adCompleteTimer !== null) {
       clearTimeout(this.adCompleteTimer);
     }
@@ -193,8 +204,21 @@ export class SlotLifecycle {
     this.currentState = "won";
     this.currentState = "rendering";
 
+    // Replace any previously-rendered creative before rendering the new one.
+    // On a refresh auction (D17) this slot's container already holds the prior
+    // creative; the banner + video renderers `appendChild`, so without clearing
+    // here the new creative stacks beneath the old one (duplicate ads). Clearing
+    // once at the single render dispatch also covers a mediaType change across a
+    // refresh. Native/fallback renderers clear internally; this is idempotent
+    // with those and a no-op on first render (empty container).
+    this.deps.container.replaceChildren();
+
     // Branch on the winning bid's mediaType — not on a config-level discriminant.
     const bidMediaType = (bid as { mediaType?: string }).mediaType;
+    // Record what actually rendered so refresh (D64) and adComplete read the
+    // correct per-mediaType config. Bids omitting mediaType render as banner.
+    this.renderedMediaType =
+      bidMediaType === "video" ? "video" : bidMediaType === "native" ? "native" : "banner";
 
     if (bidMediaType === "video") {
       if (!this.deps.videoRenderer) {
@@ -292,9 +316,28 @@ export class SlotLifecycle {
   private startRefreshIfConfigured(): void {
     if (this.destroyed) return;
     if (this.deps.suppressRefresh) return;
-    if (this.refreshScheduler) return;
-    const refresh = this.deps.config.refresh;
-    if (!refresh || !this.deps.orchestrator) return;
+    if (!this.deps.orchestrator) return;
+
+    // D64: cadence follows whichever mediaType rendered this impression.
+    const refresh = this.refreshForRenderedMediaType();
+
+    // Rendered mediaType has no refresh → this impression does not refresh. If a
+    // prior impression's mediaType was refreshing, stop it (the current creative
+    // opts out; no further refreshes fire while it is shown).
+    if (!refresh) {
+      if (this.refreshScheduler) {
+        this.refreshScheduler.cancel();
+        this.refreshScheduler = null;
+      }
+      return;
+    }
+
+    // A scheduler is already running from a previous impression: keep it (and its
+    // session-cap fire count) but retune to the newly rendered mediaType's rate.
+    if (this.refreshScheduler) {
+      this.refreshScheduler.updateInterval(refresh.intervalSec * 1000);
+      return;
+    }
 
     const isInView = this.deps.isInView ?? (() => true);
     this.refreshScheduler = new RefreshScheduler({

@@ -15,15 +15,32 @@ export class RefreshScheduler {
   private timerStartedAt = 0;
   private visibilityHandler: (() => void) | null = null;
   private viewportUnsub: (() => void) | null = null;
+  // Mutable so updateInterval() can retune the cadence between impressions
+  // (per-mediaType refresh, D64) without resetting the session-cap fire count.
+  private intervalMs: number;
 
-  constructor(private readonly opts: RefreshSchedulerOptions) {}
+  constructor(private readonly opts: RefreshSchedulerOptions) {
+    this.intervalMs = opts.intervalMs;
+  }
 
   start(): void {
     if (this.cancelled) return;
     if (this.opts.sessionCap !== undefined && this.fires >= this.opts.sessionCap) return;
     this.attachVisibilityListener();
     this.attachViewportNotifier();
-    this.remainingMs = this.opts.intervalMs;
+    this.remainingMs = this.intervalMs;
+    this.scheduleNext();
+  }
+
+  // Retune the refresh interval for subsequent cycles (D64: the rendered
+  // mediaType drives the cadence, re-evaluated each impression). The countdown
+  // is reset to the new interval measured from now, since a fresh creative just
+  // rendered; `fires` (and thus the session cap) is preserved.
+  updateInterval(intervalMs: number): void {
+    if (this.cancelled) return;
+    this.intervalMs = intervalMs;
+    this.clearTimer();
+    this.remainingMs = intervalMs;
     this.scheduleNext();
   }
 
@@ -37,14 +54,14 @@ export class RefreshScheduler {
   private scheduleNext(): void {
     if (this.cancelled) return;
     if (!this.isPlayable()) return;
-    const delay = this.remainingMs ?? this.opts.intervalMs;
+    const delay = this.remainingMs ?? this.intervalMs;
     this.timerStartedAt = Date.now();
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.cancelled) return;
       this.opts.onRefresh();
       this.fires += 1;
-      this.remainingMs = this.opts.intervalMs;
+      this.remainingMs = this.intervalMs;
       if (this.opts.sessionCap !== undefined && this.fires >= this.opts.sessionCap) {
         this.opts.onCapReached?.();
         this.cancel();
@@ -57,7 +74,7 @@ export class RefreshScheduler {
   private clearTimer(): void {
     if (this.timer !== null) {
       const elapsed = Date.now() - this.timerStartedAt;
-      const remaining = (this.remainingMs ?? this.opts.intervalMs) - elapsed;
+      const remaining = (this.remainingMs ?? this.intervalMs) - elapsed;
       this.remainingMs = Math.max(0, remaining);
       clearTimeout(this.timer);
       this.timer = null;

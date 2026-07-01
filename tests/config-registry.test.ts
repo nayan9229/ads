@@ -178,36 +178,55 @@ describe("ConfigRegistry", () => {
     expect(result.mediaTypes.video).toBeDefined();
   });
 
-  it("accepts valid refresh config with intervalSec >= 30", () => {
+  it("accepts valid per-mediaType refresh config with intervalSec >= 30", () => {
     const registry = new ConfigRegistry();
     const result = registry.register("slot_refresh", {
-      mediaTypes: { banner: { sizes: [[300, 250]] } },
+      mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 30, sessionCap: 5 } } },
       bidders: [{ bidder: "appnexus", params: {} }],
-      refresh: { intervalSec: 30, sessionCap: 5 },
     });
-    expect(result.refresh).toEqual({ intervalSec: 30, sessionCap: 5 });
+    expect(result.mediaTypes.banner?.refresh).toEqual({ intervalSec: 30, sessionCap: 5 });
   });
 
-  it("rejects refresh.intervalSec < 30 (IAB minimum)", () => {
+  it("accepts distinct refresh per mediaType (D64: rendered type drives cadence)", () => {
+    const registry = new ConfigRegistry();
+    const result = registry.register("slot_refresh_mixed", {
+      mediaTypes: {
+        banner: { sizes: [[300, 250]], refresh: { intervalSec: 30 } },
+        video: { linearity: 1, refresh: { intervalSec: 60 } },
+      },
+      bidders: [{ bidder: "appnexus", params: {} }],
+    });
+    expect(result.mediaTypes.banner?.refresh).toEqual({ intervalSec: 30 });
+    expect(result.mediaTypes.video?.refresh).toEqual({ intervalSec: 60 });
+  });
+
+  it("rejects mediaType refresh.intervalSec < 30 (IAB minimum)", () => {
     const registry = new ConfigRegistry();
     expect(() =>
       registry.register("slot_bad_refresh", {
-        mediaTypes: { banner: { sizes: [[300, 250]] } },
+        mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 10 } } },
         bidders: [{ bidder: "appnexus", params: {} }],
-        refresh: { intervalSec: 10 },
       }),
     ).toThrow(ConfigError);
   });
 
-  it("rejects refresh without intervalSec", () => {
+  it("rejects mediaType refresh without intervalSec", () => {
     const registry = new ConfigRegistry();
     expect(() =>
       registry.register("slot_bad_refresh2", {
-        mediaTypes: { banner: { sizes: [[300, 250]] } },
+        mediaTypes: { banner: { sizes: [[300, 250]], refresh: {} } },
         bidders: [{ bidder: "appnexus", params: {} }],
-        refresh: {},
       }),
     ).toThrow(ConfigError);
+  });
+
+  it("honors minRefreshIntervalSec for per-mediaType refresh", () => {
+    const registry = new ConfigRegistry({ minRefreshIntervalSec: 5 });
+    const result = registry.register("slot_min", {
+      mediaTypes: { banner: { sizes: [[300, 250]], refresh: { intervalSec: 5 } } },
+      bidders: [{ bidder: "appnexus", params: {} }],
+    });
+    expect(result.mediaTypes.banner?.refresh).toEqual({ intervalSec: 5 });
   });
 
   it("accepts optional eager flag; absence defaults to lazy", () => {
