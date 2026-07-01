@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/nayan9229/ads/compare/v1.2.2...v1.3.0) (2026-07-01)
+
+### Features
+
+* **prebid:** bundle priceFloors module so prebidConfig.floors emits imp.bidfloor ([8f2e819](https://github.com/nayan9229/ads/commit/8f2e819f74492f633b5f89d7b78b63e0157afce2))
+* **refresh:** move refresh config from slot to mediaType level ([252f711](https://github.com/nayan9229/ads/commit/252f71186429757fc9f540c616699a8484615ac1))
+
+
+
+
+## Subresource Integrity
+
+```
+# Subresource Integrity hashes
+
+- `dist/pubads.mini.js` — `sha384-tVT94LjBzpZeNXdkv8IMk29PoV3e5vDj83wxy4Gb5tcXruN2wSEk7Ow/Sr/HQldx`
+- `dist/pubads.mini.esm.js` — `sha384-1npO4BSdZhJdkhNzXRMy8n3N+SB7d2tZbvVOpn1W6Z6TQ4wN0p8ddnsBZsM+3Gv/`
+
+Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.
+```
+
 ## [1.2.2](https://github.com/nayan9229/ads/compare/v1.2.1...v1.2.2) (2026-06-18)
 
 ### Bug Fixes
