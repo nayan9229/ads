@@ -1,6 +1,6 @@
 # Subresource Integrity hashes
 
-- `dist/pubads.mini.js` — `sha384-qZxaBLU1FZqHZDO4jwNrTf/exsM1w+nyUmbnotAMRIF3j/yBDBFw2fIS4VWTVAng`
-- `dist/pubads.mini.esm.js` — `sha384-mdDBV0j2oDFO0POlN8g740dLuAw9pmpu+zaQbrxLXkSAkS4G/ul/Pto9HeFgK0VQ`
+- `dist/pubads.mini.js` — `sha384-tmsE1fMPFtWbRh0Rr+KAciTMnD0Wl4Vy790AG+K+VNunHxf0QmS5gUq1K7vj41qZ`
+- `dist/pubads.mini.esm.js` — `sha384-6MZ1ED9gLBu7rm8ImhZ4vdTkWTv1fmDtGuQV8JVCTjq4iGqVj01giDmnvhMYCuGu`
 
 Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.

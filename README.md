@@ -186,6 +186,11 @@ Keyed by `script id`. Each slot independent.
 window.AdWrapperConfig = {
   my_slot_id: {
     mediaTypes: {
+      // `refresh` is per-mediaType (opt-in). The format that actually renders
+      // drives the cadence, re-evaluated each impression. Post-viewable
+      // re-auction, floor 30s (or `minRefreshIntervalSec`). Omit to disable.
+      //   banner: { sizes: [...], refresh: { intervalSec: 30, sessionCap: 5 } }
+      //   video:  { ..., refresh: { intervalSec: 60 } }
       banner: { /* see below */ },
       video:  { /* see below */ },
       native: { /* see below */ },
@@ -200,8 +205,7 @@ window.AdWrapperConfig = {
     fallback: { type: "image", url: "/house-300x250.png", clickUrl: "https://example.com/promo" },
     //   Rendered after retry exhaustion.
 
-    refresh: { intervalSec: 30, sessionCap: 5 },
-    //   Post-viewable re-auction. Floor 30s. Omit to disable.
+    //   NOTE: `refresh` moved to per-mediaType — see the mediaTypes block above.
 
     container: "my-ad-div",
     //   Optional. ID of an existing <div> element to render into.
