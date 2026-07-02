@@ -184,7 +184,7 @@
       // PubMatic — video credentials
       { bidder: "pubmatic", params: { publisherId: "156276", adSlot: "pubmatic_test@300x600" } },
       // Magnite — banner credentials
-      { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
+      // { bidder: "rubicon", params: { accountId: 14062, siteId: 70608, zoneId: 335918 } },
       // // Magnite — video credentials
       // {
       //   bidder: "rubicon",
@@ -198,7 +198,7 @@
       // },
       // { bidder: "appnexus", params: { placementId: "10433394", reserve: BANNER_FLOOR_USD } },
       // { bidder: "appnexus", params: { placementId: "13144370", reserve: BANNER_FLOOR_USD } },
-      { bidder: "yahoossp", params: { dcn: "8a9698a0173a50f70175f6b6695d00",pos: '300x600_top' } },
+      // { bidder: "yahoossp", params: { dcn: "8a9698a0173a50f70175f6b6695d00",pos: '300x600_top' } },
     ];
 
     // var BIDDERS = [
@@ -241,25 +241,26 @@
     // ];
 
     window.AdWrapperConfig = {
-      // slot_300x250: {
-      //   mediaTypes: {
-      //     // Auto-refresh is OPT-IN, per mediaType. The mediaType that actually
-      //     // rendered drives the cadence, re-evaluated each impression: if banner
-      //     // wins it refreshes every 10s; if video wins, every 30s. Viewability-
-      //     // gated (starts after 50% in view for 1s; pauses when tab hidden /
-      //     // off-screen). `minRefreshIntervalSec: 10` above only sets the floor —
-      //     // intervalSec must be >= it.
-      //     banner: { sizes: [[300, 250]], refresh: { intervalSec: 10, sessionCap: 10 } },
-      //     video: { ...VIDEO_PROFILE, refresh: { intervalSec: 6, sessionCap: 10 } },
-      //   },
-      //   bidders: BIDDERS,
-      //   eager: true,
-      //   adCompleteDelayMs: 5,
-      // },
+      slot_300x250: {
+        mediaTypes: {
+          // Auto-refresh is OPT-IN, per mediaType. The mediaType that actually
+          // rendered drives the cadence, re-evaluated each impression: if banner
+          // wins it refreshes every 10s; if video wins, every 30s. Viewability-
+          // gated (starts after 50% in view for 1s; pauses when tab hidden /
+          // off-screen). `minRefreshIntervalSec: 10` above only sets the floor —
+          // intervalSec must be >= it.
+          banner: { sizes: [[300, 250]], refresh: { intervalSec: 10, sessionCap: 10 } },
+          // Video refreshes on ad-complete (D66), not a timer — no intervalSec.
+          video: { ...VIDEO_PROFILE, refresh: { sessionCap: 10 } },
+        },
+        bidders: BIDDERS,
+        eager: true,
+        adCompleteDelayMs: 5,
+      },
       slot_300x600: {
         mediaTypes: {
-          banner: { sizes: [[300, 600]], refresh: { intervalSec: 2, sessionCap: 10 } },
-          // video: { ...VIDEO_PROFILE, refresh: { intervalSec: 30, sessionCap: 10 } },
+          banner: { sizes: [[300, 600]], refresh: { intervalSec: 10, sessionCap: 10 } },
+          video: { ...VIDEO_PROFILE, refresh: { sessionCap: 10 } }, // ad-complete-driven (D66)
         },
         bidders: BIDDERS,
         eager: true,

@@ -186,11 +186,12 @@ Keyed by `script id`. Each slot independent.
 window.AdWrapperConfig = {
   my_slot_id: {
     mediaTypes: {
-      // `refresh` is per-mediaType (opt-in). The format that actually renders
-      // drives the cadence, re-evaluated each impression. Post-viewable
-      // re-auction, floor 30s (or `minRefreshIntervalSec`). Omit to disable.
+      // `refresh` is per-mediaType (opt-in). Banner/native are time-based
+      // (post-viewable re-auction, floor 30s or `minRefreshIntervalSec`).
+      // Video is EVENT-driven: it refreshes when the video finishes OR the user
+      // skips it, takes `sessionCap` only (NO `intervalSec` — rejected for video). Omit to disable.
       //   banner: { sizes: [...], refresh: { intervalSec: 30, sessionCap: 5 } }
-      //   video:  { ..., refresh: { intervalSec: 60 } }
+      //   video:  { ..., refresh: { sessionCap: 5 } }   // refreshes on ad-complete or skip
       banner: { /* see below */ },
       video:  { /* see below */ },
       native: { /* see below */ },
@@ -445,6 +446,38 @@ connect-src ... https://*.nr-data.net
 
 For EU data residency, replace `*.nr-data.net` with `*.eu01.nr-data.net` (or include both).
 
+### Execution surface & GAM-creative backfill (D65)
+
+The SDK detects **where** it runs and degrades per surface — orthogonal to the `webview`/`browser` environment axis:
+
+| Surface | Consent | Identity | Viewability | Refresh | Render |
+| --- | --- | --- | --- | --- | --- |
+| `top` (default) | `window.__tcfapi` | on | IntersectionObserver | SDK-owned | banner + in/outstream |
+| `friendly-iframe` (same-origin) | `window.top.__tcfapi` | on | IO via top doc | SDK-owned | banner + outstream |
+| `safeframe` (cross-origin) | IAB `__tcfLocator` postMessage | **off** (partitioned/3p cookies) | `$sf.ext.geom()` | SDK-owned | banner + best-effort outstream (→ banner fallback) |
+
+This enables a **GAM-first waterfall backfill**: GAM serves the slot first; on **unfill** it serves an HTML5 creative that loads the SDK, which runs the Prebid-direct auction and renders the winner inside the creative. Consent is gated by `consentDisabled` on every surface.
+
+**Publisher-injected signals** (recover identity/context a SafeFrame can't read). Provide them via the channel your GAM creative type supports; the SDK reads `$sf.ext.meta().adw` → `window.AdWrapperIdentity` → `gen_ad.min.js` script-URL params (first present wins):
+
+```html
+<script>
+  window.AdWrapperIdentity = {
+    uid2: "<UID2 token>",          // or id5 / ramp; or a raw base64url eids array via `eids`
+    buyeruid: "<optional>",
+    page: "https://publisher.example/article",   // required in a SafeFrame (real URL unreadable)
+    cat: ["IAB1", "IAB2"],
+    keywords: "sports,news",
+    content: { language: "en" },
+  };
+</script>
+<script id="1729" src="https://admedia.begenuin.com/ad-sdk/gen_ad.min.js"></script>
+```
+
+Injected identity merges into `ortb2.user.eids` with **top precedence** (authoritative first-party wins over cookie-derived IDs); injected `site` (`cat`/`keywords`/`content`) merges into `ortb2.site`. Injected `page` is a best-effort hint in framed contexts — Prebid's `refererInfo` usually overwrites `site.page` with the referrer/ancestor-derived top URL. Injected `$sf.ext` viewability is also stamped onto `ortb2Imp.ext.data.viewability`.
+
+**CSP:** when the SDK runs as a GAM creative, the publisher page must allow the SDK script origin in `script-src` (e.g. `https://admedia.begenuin.com`). Consent (`__tcfLocator`) and viewability (`$sf.ext`) use postMessage / the SafeFrame host API — no additional network hosts. See `docs/adr/0008-execution-surface-detection.md`.
+
 ### NR event mapping
 
 Every SDK emission routes through `newrelic.addPageAction("adwrapper_" + event, attrs)`. NRQL queries against `adwrapper_*` PageActions are the canonical view; the NR Errors UI is intentionally unused (see lockdown below).
@@ -514,5 +547,5 @@ npx http-server -p 4173 .
 [Apache 2.0](./LICENSE).
 
 ```
-claude-v --resume 69b76cf5-e935-4ab3-813e-ce29b67b3b9a                                                                                                                 
+claude-v claude --resume 03d726b6-882f-4871-8e48-6624695ec747
 ```
