@@ -1,6 +1,6 @@
 {
   "name": "@nayan9229/ads",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Prebid.js wrapper SDK — self-executing script tag, batched auction, banner / outstream / native.",
   "type": "module",
   "main": "dist/pubads.mini.js",

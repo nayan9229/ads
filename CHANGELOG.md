@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/nayan9229/ads/compare/v1.3.0...v1.4.0) (2026-07-02)
+
+### Features
+
+* **refresh:** per-mediaType refresh; video refreshes on ad-complete or skip ([3f092bc](https://github.com/nayan9229/ads/commit/3f092bc8dce2e1fba7858a8afd665e07572c0bf0))
+* **surface:** detect execution surface + GAM-creative backfill with injected signals ([ccefd17](https://github.com/nayan9229/ads/commit/ccefd1712a2c59fed719f6e7042e0cb4cbd2489d))
+
+
+
+
+## Subresource Integrity
+
+```
+# Subresource Integrity hashes
+
+- `dist/pubads.mini.js` — `sha384-TXF2fvvNz5ji9So+ZmEDFZQBePZCZs83G3CG73uG6kZEl7cueqTLLXZDISyyjdzF`
+- `dist/pubads.mini.esm.js` — `sha384-9iFkhN3Al5wi2zhtNBYPXoxO+9VlqD9+kr2voOwHnq6tHF5orM7AoTl4JPNOjFqd`
+
+Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.
+```
+
 ## [1.3.0](https://github.com/nayan9229/ads/compare/v1.2.2...v1.3.0) (2026-07-01)
 
 ### Features
