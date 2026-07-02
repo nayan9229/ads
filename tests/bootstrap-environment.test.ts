@@ -20,7 +20,8 @@ describe("bootstrap — environment_detected event", () => {
 
     // Subscribe after bootstrap — emit happens via deferred microtask so handler attaches first.
     return Promise.resolve().then(() => {
-      expect(seen).toEqual([{ environment: "webview" }]);
+      // jsdom's window is its own top → surface "top" (D65).
+      expect(seen).toEqual([{ environment: "webview", surface: "top" }]);
     });
   });
 });

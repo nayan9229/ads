@@ -25,6 +25,12 @@ export interface SignalProviderOutput {
   readonly resolverSignals: ResolverSignals | null;
   readonly prebidEids: ReadonlyArray<Eid>;
   readonly consent: ConsentSnapshot;
+  // Publisher-injected identity (#1, D65) — merged with top precedence.
+  readonly injectedEids?: ReadonlyArray<Eid>;
+  readonly injectedBuyeruid?: string;
+  // Contextual site FPD (#5, D65) — carried in the per-auction patch so Prebid's
+  // ortb2 replace doesn't drop it.
+  readonly site?: Record<string, unknown>;
 }
 
 export type SignalProvider = () => Promise<SignalProviderOutput>;
@@ -79,6 +85,11 @@ export class AuctionOrchestrator {
         resolver: signals.resolverSignals,
         prebidEids: signals.prebidEids,
         consent: signals.consent,
+        ...(signals.injectedEids ? { injectedEids: signals.injectedEids } : {}),
+        ...(signals.injectedBuyeruid !== undefined
+          ? { injectedBuyeruid: signals.injectedBuyeruid }
+          : {}),
+        ...(signals.site ? { site: signals.site } : {}),
       });
       this.pbjs.setConfig({ ortb2: patch });
     }
@@ -120,10 +131,17 @@ export class AuctionOrchestrator {
         };
       }
 
+      // #4 (D65): stamp measured-viewable into the imp so bidders can price it.
+      // Only present on `safeframe` (via $sf.ext); undefined elsewhere.
+      const viewability = s.lifecycle.viewabilitySignal();
+
       return {
         code: s.slotId,
         mediaTypes,
         bids,
+        ...(typeof viewability === "number"
+          ? { ortb2Imp: { ext: { data: { viewability } } } }
+          : {}),
       };
     });
     if (typeof this.pbjs.removeAdUnit === "function") {

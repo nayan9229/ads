@@ -18,7 +18,8 @@ import { AnalyticsEmitter } from "./analytics-emitter";
 import { NewRelicConfig, NewRelicSink } from "./nr-sink";
 import { CurrencyConverter } from "./currency-converter";
 import { IdentityConfig, IdentityResolver } from "./identity-resolver";
-import { Environment, detectEnvironment } from "./detect-environment";
+import { Environment, Surface, detectEnvironment, detectSurface } from "./detect-environment";
+import { readInjectedSignals } from "./injected-signals";
 
 export const DEFAULT_RETRY_DELAYS_MS: ReadonlyArray<number> = [1000, 2000, 4000, 8000, 16000];
 
@@ -264,11 +265,53 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
     return identityReadyPromise;
   }
 
-  if (
-    typeof window !== "undefined" &&
-    opts.identityResolver?.enabled === true &&
-    resolveEnvironment(opts.environment) !== "webview"
-  ) {
+  // Execution surface (D65) — top | friendly-iframe | safeframe. Orthogonal to
+  // `environment`; drives per-surface degradation (identity off in safeframe, and
+  // the P1/P2 consent + viewability sourcing). Named `executionSurface` to avoid
+  // colliding with bootSlot's `surface` param.
+  const executionSurface: Surface = detectSurface();
+
+  // Publisher-injected signals (#1 identity + #5 contextual, D65). Read once from
+  // the creative (SafeFrame meta / global / script-URL). Authoritative first-party
+  // — flows on ALL surfaces, including safeframe where cookie identity is off.
+  const injectedSignals = readInjectedSignals();
+  const hasInjectedIdentity =
+    injectedSignals.eids.length > 0 || injectedSignals.buyeruid !== undefined;
+
+  // Effective contextual site (#5, D65): publisher opts.ortb2.site with injected
+  // fields layered on (injected site.page overrides only when framed, since a
+  // safeframe can't read the real top URL). Computed once; pushed at init AND
+  // carried in the per-auction identity patch so Prebid's setConfig({ortb2})
+  // replace can't clobber it (verified: it did — site.cat/keywords vanished from
+  // the bid request whenever identity ran).
+  const baseSiteObj =
+    opts.ortb2 && typeof opts.ortb2.site === "object" && opts.ortb2.site
+      ? (opts.ortb2.site as Record<string, unknown>)
+      : undefined;
+  const contextualSite: Record<string, unknown> | undefined = ((): Record<string, unknown> | undefined => {
+    const site: Record<string, unknown> = baseSiteObj ? { ...baseSiteObj } : {};
+    const inj = injectedSignals.site;
+    if (inj) {
+      if (inj.cat) site.cat = inj.cat;
+      if (inj.keywords !== undefined) site.keywords = inj.keywords;
+      if (executionSurface !== "top" && inj.page !== undefined) site.page = inj.page;
+      if (inj.content) {
+        site.content = {
+          ...(typeof site.content === "object" && site.content ? (site.content as Record<string, unknown>) : {}),
+          ...inj.content,
+        };
+      }
+    }
+    return Object.keys(site).length > 0 ? site : undefined;
+  })();
+
+  // Identity (userId modules + identity-resolver runtime) is unusable in a
+  // cross-origin safeframe — storage is partitioned and 3p cookies are blocked
+  // (D65) — and is already off in webview (D34). Gate both paths on this.
+  const identityAllowed =
+    resolveEnvironment(opts.environment) !== "webview" && executionSurface !== "safeframe";
+
+  if (typeof window !== "undefined" && opts.identityResolver?.enabled === true && identityAllowed) {
     void ensureIdentityResolverPreload();
   }
 
@@ -323,18 +366,23 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
 
   const environment = resolveEnvironment(opts.environment);
   const identityResolver =
-    opts.identity && environment !== "webview" ? new IdentityResolver(opts.identity) : null;
+    opts.identity && identityAllowed ? new IdentityResolver(opts.identity) : null;
 
   const sharedConsentManager: ConsentManager | null = opts.consentDisabled
     ? null
     : new ConsentManager({
         timeoutMs: opts.consentTimeoutMs ?? 1000,
         ...(opts.consentTimezone ? { timezone: opts.consentTimezone } : {}),
+        surface: executionSurface,
       });
 
   function buildSignalProvider(): import("./auction-orchestrator").SignalProvider {
     return async () => {
-      const runtime = await ensureIdentityResolverPreload();
+      // Resolver only runs where identity is allowed (not webview/safeframe, D65).
+      const runtime =
+        identityAllowed && opts.identityResolver?.enabled === true
+          ? await ensureIdentityResolverPreload()
+          : null;
       let resolverSignals: import("./identity-signal-merger").ResolverSignals | null = null;
       if (runtime) {
         try {
@@ -353,21 +401,35 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
         ...(consentState?.tcString !== undefined ? { tcString: consentState.tcString } : {}),
         ...(consentState?.uspString !== undefined ? { uspString: consentState.uspString } : {}),
       };
-      return { resolverSignals, prebidEids: [], consent };
+      return {
+        resolverSignals,
+        prebidEids: [],
+        consent,
+        ...(injectedSignals.eids.length > 0 ? { injectedEids: injectedSignals.eids } : {}),
+        ...(injectedSignals.buyeruid !== undefined
+          ? { injectedBuyeruid: injectedSignals.buyeruid }
+          : {}),
+        ...(contextualSite ? { site: contextualSite } : {}),
+      };
     };
   }
 
   // Defer environment_detected emit so callers can subscribe after bootstrap returns.
   Promise.resolve().then(() => {
-    callbacks.emit("environment_detected", { environment });
+    callbacks.emit("environment_detected", { environment, surface: executionSurface });
   });
 
   async function getPbjs(): Promise<FullPbjs> {
     if (pbjsCached) return pbjsCached;
     pbjsCached = (await loadPrebid()) as FullPbjs;
+    // A signal provider runs when there is anything to merge into ortb2.user:
+    // the identity-resolver (where allowed) OR publisher-injected identity (any
+    // surface, incl. safeframe — #1/D65).
+    const needsSignalProvider =
+      (identityAllowed && opts.identityResolver?.enabled === true) || hasInjectedIdentity;
     orchestrator = new AuctionOrchestrator(
       pbjsCached,
-      opts.identityResolver?.enabled === true ? buildSignalProvider() : undefined,
+      needsSignalProvider ? buildSignalProvider() : undefined,
     );
     // Sync isolation (D61): the renamed global isolates the JS API but NOT
     // network/cookie side effects. If the host page runs its own Prebid (only
@@ -389,8 +451,15 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       if (opts.schain) {
         setConfig.call(pbjsCached, { schain: opts.schain });
       }
-      if (opts.ortb2 && Object.keys(opts.ortb2).length > 0) {
-        setConfig.call(pbjsCached, { ortb2: opts.ortb2 });
+      // Init push of publisher/injected contextual site (#5, D65). This covers the
+      // no-identity case (no per-auction patch runs); when identity IS active the
+      // same contextualSite also rides the per-auction patch (buildSignalProvider)
+      // so Prebid's ortb2 replace can't drop it.
+      const ortb2ToPush: Record<string, unknown> | undefined = contextualSite
+        ? { ...(opts.ortb2 ?? {}), site: contextualSite }
+        : opts.ortb2;
+      if (ortb2ToPush && Object.keys(ortb2ToPush).length > 0) {
+        setConfig.call(pbjsCached, { ortb2: ortb2ToPush });
       }
       if (hostPrebidPresent) {
         setConfig.call(pbjsCached, { userSync: { syncEnabled: false } });
@@ -497,9 +566,12 @@ export function bootstrap(opts: BootstrapOptions): PublicApi {
       retryDelaysMs: opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS,
       isInView: () => true,
       lazyLoadGate: new LazyLoadGate(),
-      viewabilityTracker: new ViewabilityTracker(),
+      viewabilityTracker: new ViewabilityTracker(executionSurface),
       ...(sharedConsentManager ? { consentManager: sharedConsentManager } : {}),
       ...(currencyConverter ? { currencyConverter } : {}),
+      surface: executionSurface,
+      // Refresh stays SDK-owned on framed browser surfaces (friendly-iframe /
+      // safeframe) per D65 — only webview suppresses it (D34).
       ...(environment === "webview" ? { suppressRefresh: true } : {}),
     });
 

@@ -217,3 +217,40 @@ describe("AuctionOrchestrator — batched auction", () => {
     expect(pbjs.removeAdUnit).toHaveBeenNthCalledWith(2, "retry_slot");
   });
 });
+
+// P2/#4 (D65): the orchestrator stamps measured-viewable into the adUnit's imp.
+describe("AuctionOrchestrator — imp viewability stamp (#4)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    jest.useFakeTimers();
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it("stamps ortb2Imp.ext.data.viewability when the slot reports a viewability signal", () => {
+    const pbjs = makeStubPbjs();
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const orchestrator = new AuctionOrchestrator(pbjs);
+
+    const a = makeSlot("slot_vp", callbacks, pbjs);
+    jest.spyOn(a.lifecycle, "viewabilitySignal").mockReturnValue(0.7);
+
+    orchestrator.enqueue(a);
+    jest.advanceTimersByTime(50);
+
+    const adUnit = pbjs.addAdUnits.mock.calls[0][0][0];
+    expect(adUnit.ortb2Imp).toEqual({ ext: { data: { viewability: 0.7 } } });
+  });
+
+  it("omits ortb2Imp when no viewability signal is available (e.g. top surface)", () => {
+    const pbjs = makeStubPbjs();
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const orchestrator = new AuctionOrchestrator(pbjs);
+
+    const a = makeSlot("slot_novp", callbacks, pbjs);
+    orchestrator.enqueue(a);
+    jest.advanceTimersByTime(50);
+
+    const adUnit = pbjs.addAdUnits.mock.calls[0][0][0];
+    expect(adUnit.ortb2Imp).toBeUndefined();
+  });
+});

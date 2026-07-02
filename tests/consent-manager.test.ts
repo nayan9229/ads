@@ -111,3 +111,97 @@ describe("ConsentManager", () => {
     expect(state.tcString).toBeUndefined();
   });
 });
+
+// P1 (D65): in a SafeFrame the CMP lives on the top page, unreachable directly.
+// ConsentManager must reach it via the IAB __tcfLocator postMessage bridge.
+describe("ConsentManager — safeframe cross-frame bridge", () => {
+  let locator: HTMLIFrameElement;
+  let cmpListener: ((e: MessageEvent) => void) | null = null;
+
+  beforeEach(() => {
+    jest.useRealTimers();
+    delete (window as unknown as { __tcfapi?: unknown }).__tcfapi;
+    locator = document.createElement("iframe");
+    locator.name = "__tcfLocator";
+    document.body.appendChild(locator);
+  });
+  afterEach(() => {
+    if (cmpListener) window.removeEventListener("message", cmpListener);
+    cmpListener = null;
+    locator.remove();
+  });
+
+  it("resolves tcString over the postMessage bridge", async () => {
+    cmpListener = (e: MessageEvent) => {
+      const data = e.data as { __tcfapiCall?: { callId: string; command: string } };
+      if (data && data.__tcfapiCall && data.__tcfapiCall.command === "addEventListener") {
+        // Reply as a real CMP does — from the target frame — so event.source is
+        // set (jsdom's window.postMessage leaves source null). The SDK bridge
+        // trusts replies only from the frame it posted to.
+        const reply = new MessageEvent("message", {
+          data: {
+            __tcfapiReturn: {
+              callId: data.__tcfapiCall.callId,
+              success: true,
+              returnValue: {
+                tcString: "CO_SAFEFRAME",
+                eventStatus: "tcloaded",
+                gdprApplies: true,
+                purpose: { consents: { 1: true } },
+              },
+            },
+          },
+          source: window as unknown as Window & typeof globalThis,
+        });
+        window.dispatchEvent(reply);
+      }
+    };
+    window.addEventListener("message", cmpListener);
+
+    const cm = new ConsentManager({ timeoutMs: 3000, timezone: "Europe/London", surface: "safeframe" });
+    const state = await cm.resolve();
+
+    expect(state.tcString).toBe("CO_SAFEFRAME");
+    expect(state.blocked).toBe(false);
+  });
+
+  it("does not use window.__tcfapi directly in safeframe (no in-frame CMP) — falls back to no-CMP policy", async () => {
+    locator.remove(); // no locator frame → no bridge target
+    const cm = new ConsentManager({ timeoutMs: 40, timezone: "Asia/Tokyo", surface: "safeframe" });
+    const state = await cm.resolve();
+    expect(state.blocked).toBe(false); // non-EU tz, no CMP reachable
+    expect(state.tcString).toBeUndefined();
+  });
+
+  it("rejects a forged __tcfapiReturn from a source other than the CMP frame (anti-spoof)", async () => {
+    const attacker = document.createElement("iframe");
+    document.body.appendChild(attacker);
+    cmpListener = (e: MessageEvent) => {
+      const data = e.data as { __tcfapiCall?: { callId: string; command: string } };
+      if (data && data.__tcfapiCall && data.__tcfapiCall.command === "addEventListener") {
+        const forged = new MessageEvent("message", {
+          data: {
+            __tcfapiReturn: {
+              callId: data.__tcfapiCall.callId,
+              success: true,
+              returnValue: {
+                tcString: "FORGED",
+                eventStatus: "tcloaded",
+                gdprApplies: true,
+                purpose: { consents: { 1: true } },
+              },
+            },
+          },
+          source: attacker.contentWindow as unknown as Window & typeof globalThis, // NOT the target frame
+        });
+        window.dispatchEvent(forged);
+      }
+    };
+    window.addEventListener("message", cmpListener);
+
+    const cm = new ConsentManager({ timeoutMs: 60, timezone: "Asia/Tokyo", surface: "safeframe" });
+    const state = await cm.resolve();
+    attacker.remove();
+    expect(state.tcString).toBeUndefined(); // forged reply ignored → timed out to no-CMP
+  });
+});
