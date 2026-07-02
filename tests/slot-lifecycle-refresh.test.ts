@@ -131,7 +131,7 @@ describe("SlotLifecycle refresh wiring", () => {
     const config = registry.register("slot_rf_mt", {
       mediaTypes: {
         banner: { sizes: [[300, 250]] }, // no refresh — rendered type opts out
-        video: { linearity: 1, refresh: { intervalSec: 1 } }, // has refresh, but not rendered
+        video: { linearity: 1, refresh: { sessionCap: 3 } }, // has refresh (ad-complete, D66), but not rendered
       },
       bidders: [{ bidder: "appnexus", params: {} }],
       eager: true,

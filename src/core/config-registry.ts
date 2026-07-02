@@ -14,7 +14,9 @@ export interface FallbackImageConfig {
 }
 
 export interface RefreshConfig {
-  readonly intervalSec: number;
+  // Time-based cadence for banner/native (seconds). Absent for video, which
+  // refreshes on ad-complete instead (D64/D66) — the trigger is the event, not a timer.
+  readonly intervalSec?: number;
   readonly sessionCap?: number;
 }
 
@@ -82,25 +84,38 @@ function validateRefresh(
   slotId: string,
   minSec: number = MIN_REFRESH_SEC,
   field = "refresh",
+  opts: { eventDriven?: boolean } = {},
 ): RefreshConfig | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== "object") {
     throw new ConfigError(`\`${field}\` must be an object`, { slotId, field });
   }
   const r = raw as Record<string, unknown>;
-  if (typeof r.intervalSec !== "number" || !Number.isFinite(r.intervalSec)) {
-    throw new ConfigError(`\`${field}.intervalSec\` must be a number`, {
-      slotId,
-      field: `${field}.intervalSec`,
-      value: r.intervalSec,
-    });
-  }
-  if (r.intervalSec < minSec) {
-    throw new ConfigError(`\`${field}.intervalSec\` must be >= ${minSec}`, {
-      slotId,
-      field: `${field}.intervalSec`,
-      value: r.intervalSec,
-    });
+
+  if (opts.eventDriven) {
+    // Video (D66): refresh is triggered by the video ad completing, not a timer.
+    // `intervalSec` is meaningless here — reject it loudly rather than silently ignore.
+    if (r.intervalSec !== undefined) {
+      throw new ConfigError(
+        `\`${field}.intervalSec\` is not supported for video refresh; video refreshes on ad-complete`,
+        { slotId, field: `${field}.intervalSec`, value: r.intervalSec },
+      );
+    }
+  } else {
+    if (typeof r.intervalSec !== "number" || !Number.isFinite(r.intervalSec)) {
+      throw new ConfigError(`\`${field}.intervalSec\` must be a number`, {
+        slotId,
+        field: `${field}.intervalSec`,
+        value: r.intervalSec,
+      });
+    }
+    if (r.intervalSec < minSec) {
+      throw new ConfigError(`\`${field}.intervalSec\` must be >= ${minSec}`, {
+        slotId,
+        field: `${field}.intervalSec`,
+        value: r.intervalSec,
+      });
+    }
   }
   if (r.sessionCap !== undefined) {
     if (typeof r.sessionCap !== "number" || r.sessionCap < 1) {
@@ -112,7 +127,7 @@ function validateRefresh(
     }
   }
   return Object.freeze({
-    intervalSec: r.intervalSec,
+    ...(typeof r.intervalSec === "number" ? { intervalSec: r.intervalSec } : {}),
     ...(typeof r.sessionCap === "number" ? { sessionCap: r.sessionCap } : {}),
   });
 }
@@ -336,7 +351,9 @@ function validateVideoMediaType(raw: unknown, slotId: string, minSec?: number): 
       value: v.allowSkip,
     });
   }
-  const refresh = validateRefresh(v.refresh, slotId, minSec, "mediaTypes.video.refresh");
+  const refresh = validateRefresh(v.refresh, slotId, minSec, "mediaTypes.video.refresh", {
+    eventDriven: true,
+  });
   return Object.freeze({
     ...(v.context !== undefined ? { context: v.context as "instream" | "outstream" } : {}),
     ...(v.playerSize !== undefined

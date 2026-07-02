@@ -187,17 +187,36 @@ describe("ConfigRegistry", () => {
     expect(result.mediaTypes.banner?.refresh).toEqual({ intervalSec: 30, sessionCap: 5 });
   });
 
-  it("accepts distinct refresh per mediaType (D64: rendered type drives cadence)", () => {
+  it("accepts distinct refresh per mediaType — banner time-based, video sessionCap-only (D64/D66)", () => {
     const registry = new ConfigRegistry();
     const result = registry.register("slot_refresh_mixed", {
       mediaTypes: {
         banner: { sizes: [[300, 250]], refresh: { intervalSec: 30 } },
-        video: { linearity: 1, refresh: { intervalSec: 60 } },
+        video: { linearity: 1, refresh: { sessionCap: 3 } }, // ad-complete-driven, no intervalSec
       },
       bidders: [{ bidder: "appnexus", params: {} }],
     });
     expect(result.mediaTypes.banner?.refresh).toEqual({ intervalSec: 30 });
-    expect(result.mediaTypes.video?.refresh).toEqual({ intervalSec: 60 });
+    expect(result.mediaTypes.video?.refresh).toEqual({ sessionCap: 3 });
+  });
+
+  it("rejects `intervalSec` on video refresh — video refreshes on ad-complete (D66)", () => {
+    const registry = new ConfigRegistry();
+    expect(() =>
+      registry.register("slot_video_iv", {
+        mediaTypes: { video: { linearity: 1, refresh: { intervalSec: 30, sessionCap: 3 } } },
+        bidders: [{ bidder: "appnexus", params: {} }],
+      }),
+    ).toThrow(ConfigError);
+  });
+
+  it("accepts video refresh with sessionCap only (no intervalSec, D66)", () => {
+    const registry = new ConfigRegistry();
+    const result = registry.register("slot_video_cap", {
+      mediaTypes: { video: { linearity: 1, refresh: { sessionCap: 5 } } },
+      bidders: [{ bidder: "appnexus", params: {} }],
+    });
+    expect(result.mediaTypes.video?.refresh).toEqual({ sessionCap: 5 });
   });
 
   it("rejects mediaType refresh.intervalSec < 30 (IAB minimum)", () => {

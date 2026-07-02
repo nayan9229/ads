@@ -1,5 +1,6 @@
-import { CallbackRegistry } from "./callback-registry";
+import { CallbackRegistry, Unsubscribe } from "./callback-registry";
 import { AdSize, RefreshConfig, ValidatedSlotConfig } from "./config-registry";
+import { Surface } from "./detect-environment";
 import { BannerRenderer, PrebidBid, PrebidRenderApi } from "../renderers/banner-renderer";
 import { NativeBid, NativeRenderer } from "../renderers/native-renderer";
 import { VideoBid, VideoRenderer } from "../renderers/video-renderer";
@@ -43,6 +44,9 @@ export interface SlotLifecycleDeps {
   readonly consentManager?: ConsentManager;
   readonly currencyConverter?: CurrencyConverter;
   readonly suppressRefresh?: boolean;
+  // Execution surface (D65). Consumed by later phases for per-surface behavior
+  // (safeframe viewability source, outstream→banner fallback). Defaults to `top`.
+  readonly surface?: Surface;
 }
 
 export class SlotLifecycle {
@@ -60,6 +64,11 @@ export class SlotLifecycle {
   // (D64: per-mediaType refresh — the rendered type wins, re-evaluated each
   // impression) and whether adComplete is scheduled.
   private renderedMediaType: "banner" | "video" | "native" | null = null;
+  private safeframeFallbackDisposers: Unsubscribe[] = [];
+  // Video refresh is ad-complete-driven (D66), not timer-driven: this counts how
+  // many video refreshes have fired (for sessionCap) and holds the live listener.
+  private videoRefreshFires = 0;
+  private videoRefreshDisposers: Unsubscribe[] = [];
 
   constructor(private readonly deps: SlotLifecycleDeps) {}
 
@@ -73,6 +82,14 @@ export class SlotLifecycle {
 
   getResolvedSizes(): ReadonlyArray<AdSize> | null {
     return this.resolvedSizes;
+  }
+
+  // Instantaneous in-view fraction [0,1] for the auction request (#4/D65) — only
+  // available on `safeframe` via `$sf.ext`; undefined elsewhere. The orchestrator
+  // stamps it onto `ortb2Imp.ext.data.viewability` so bidders see measured-viewable.
+  viewabilitySignal(): number | undefined {
+    const v = this.deps.viewabilityTracker?.currentInView();
+    return typeof v === "number" ? v : undefined;
   }
 
   private strippedMediaTypes = new Set<"banner" | "native" | "video">();
@@ -91,11 +108,86 @@ export class SlotLifecycle {
     return out;
   }
 
+  // P5 (D65): guard a safeframe outstream-video render — on IMA failure/refusal,
+  // drop video and re-auction banner-only for this slot; on success, disarm.
+  private armSafeframeVideoFallback(): void {
+    const disarm = () => {
+      for (const off of this.safeframeFallbackDisposers) off();
+      this.safeframeFallbackDisposers = [];
+    };
+    const forThisSlot = (p: unknown): boolean =>
+      (p as { slotId?: string })?.slotId === this.deps.slotId;
+    const onFail = (p: unknown): void => {
+      if (!forThisSlot(p)) return;
+      disarm();
+      if (this.destroyed || !this.deps.orchestrator) return;
+      if (!this.strippedMediaTypes.has("video")) this.stripMediaType("video");
+      this.deps.orchestrator.enqueue({
+        slotId: this.deps.slotId,
+        config: this.deps.config,
+        lifecycle: this,
+      });
+    };
+    const onSuccess = (p: unknown): void => {
+      if (forThisSlot(p)) disarm(); // video rendered — cancel the fallback
+    };
+    disarm(); // clear any stale guard from a prior impression
+    this.safeframeFallbackDisposers.push(
+      this.deps.callbacks.on("adRenderFail", onFail),
+      this.deps.callbacks.on("adRenderSuccess", onSuccess),
+    );
+  }
+
+  // D66: video refresh is triggered by the video ad finishing — either playing to
+  // completion (IMA COMPLETE → `adComplete`) OR the user skipping it (IMA SKIPPED →
+  // `adSkipped`) — not a timer. On each, re-auction the slot (full re-auction, D64)
+  // up to `sessionCap` (completions + skips share the one counter). Re-arms when the
+  // re-auction renders video again; the cap guard stops it after `sessionCap`.
+  private armVideoRefresh(): void {
+    if (this.deps.suppressRefresh || !this.deps.orchestrator || this.refreshCapReached) return;
+    const refresh = this.deps.config.mediaTypes.video?.refresh;
+    if (!refresh) return;
+
+    const disarm = () => {
+      for (const off of this.videoRefreshDisposers) off();
+      this.videoRefreshDisposers = [];
+    };
+    const trigger = (p: unknown): void => {
+      const pl = p as { slotId?: string; mediaType?: string };
+      if (pl.slotId !== this.deps.slotId || pl.mediaType !== "video") return;
+      disarm(); // one-shot (COMPLETE and SKIPPED are mutually exclusive); next render re-arms
+      if (this.destroyed || !this.deps.orchestrator) return;
+
+      this.videoRefreshFires += 1;
+      this.deps.callbacks.emit("refresh", { slotId: this.deps.slotId });
+      this.deps.orchestrator.enqueue({
+        slotId: this.deps.slotId,
+        config: this.deps.config,
+        lifecycle: this,
+      });
+      const cap = refresh.sessionCap;
+      if (cap !== undefined && this.videoRefreshFires >= cap) {
+        this.refreshCapReached = true;
+        this.deps.callbacks.emit("refresh_cap_reached", { slotId: this.deps.slotId, cap });
+      }
+    };
+    disarm(); // clear any stale listener from a prior impression
+    this.videoRefreshDisposers.push(
+      this.deps.callbacks.on("adComplete", trigger),
+      this.deps.callbacks.on("adSkipped", trigger),
+    );
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     this.lazyAborted = true;
     this.viewabilityAborted = true;
+    this.deps.viewabilityTracker?.dispose();
+    for (const off of this.safeframeFallbackDisposers) off();
+    this.safeframeFallbackDisposers = [];
+    for (const off of this.videoRefreshDisposers) off();
+    this.videoRefreshDisposers = [];
     if (this.retryScheduler) {
       this.retryScheduler.cancel();
       this.retryScheduler = null;
@@ -228,6 +320,13 @@ export class SlotLifecycle {
         });
         return;
       }
+      // Safeframe: outstream video is best-effort (P5/D65). Guard the render so a
+      // failed/refused IMA load falls back to a banner auction for this slot.
+      if (this.deps.surface === "safeframe") this.armSafeframeVideoFallback();
+      // D66: video refresh is event-driven (ad-complete OR user-skip) — arm the
+      // listeners (no timer). The video branch returns early, so this is the only
+      // refresh path for video.
+      this.armVideoRefresh();
       this.deps.videoRenderer.render({
         container: this.deps.container,
         bid: bid as VideoBid,
@@ -323,8 +422,10 @@ export class SlotLifecycle {
 
     // Rendered mediaType has no refresh → this impression does not refresh. If a
     // prior impression's mediaType was refreshing, stop it (the current creative
-    // opts out; no further refreshes fire while it is shown).
-    if (!refresh) {
+    // opts out; no further refreshes fire while it is shown). `intervalSec` is
+    // absent for video (D66: ad-complete-driven, handled by armVideoCompleteRefresh),
+    // which never reaches this timer path — but guard the optional type anyway.
+    if (!refresh || refresh.intervalSec === undefined) {
       if (this.refreshScheduler) {
         this.refreshScheduler.cancel();
         this.refreshScheduler = null;
