@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2](https://github.com/nayan9229/ads/compare/v1.4.1...v1.4.2) (2026-07-16)
+
+### Bug Fixes
+
+* **build:** stamp live build timestamp banner on shipped bundles ([443c317](https://github.com/nayan9229/ads/commit/443c3176d639938eb0acf03c2187eed5231c5b15))
+
+
+
+
+## Subresource Integrity
+
+```
+# Subresource Integrity hashes
+
+- `dist/pubads.mini.js` — `sha384-6eSgYfwSwR8Vdba7PY7jhZXvxSQlZ1rTgGRCy2lJ4AvUBU2dlwa+NNJHe+WhtYPW`
+- `dist/pubads.mini.esm.js` — `sha384-ZjbG4m/EZz/DMuZvshkosO0xPzBwL6hHmZwtc8qrTzbYDZGw3WHROzjdDMW1FZhb`
+
+Embed in `<script integrity="..." crossorigin="anonymous">` to pin against tampering.
+```
+
 ## [1.4.1](https://github.com/nayan9229/ads/compare/v1.4.0...v1.4.1) (2026-07-16)
 
 ### Bug Fixes
