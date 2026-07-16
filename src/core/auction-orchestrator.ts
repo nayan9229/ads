@@ -1,6 +1,7 @@
 import { ValidatedSlotConfig } from "./config-registry";
 import { SlotLifecycle } from "./slot-lifecycle";
 import { resolveSizesForViewport } from "./resolve-sizes";
+import { OUTSTREAM_RENDERER_STUB } from "./prebid-outstream-stub";
 import {
   mergeIdentitySignals,
   ResolverSignals,
@@ -128,6 +129,8 @@ export class AuctionOrchestrator {
           ...(typeof v.skip === "number" ? { skip: v.skip } : {}),
           ...(v.delivery ? { delivery: [...v.delivery] } : {}),
           ...(typeof v.linearity === "number" ? { linearity: v.linearity } : {}),
+          ...(typeof v.plcmt === "number" ? { plcmt: v.plcmt } : {}),
+          ...(typeof v.maxduration === "number" ? { maxduration: v.maxduration } : {}),
         };
       }
 
@@ -139,6 +142,9 @@ export class AuctionOrchestrator {
         code: s.slotId,
         mediaTypes,
         bids,
+        // Presence-only stub so Prebid core doesn't strip the video mediaType
+        // for bidders without a renderer/outstreamAU (see prebid-outstream-stub.ts).
+        ...(effectiveMt.video ? { renderer: OUTSTREAM_RENDERER_STUB } : {}),
         ...(typeof viewability === "number"
           ? { ortb2Imp: { ext: { data: { viewability } } } }
           : {}),

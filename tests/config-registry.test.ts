@@ -165,6 +165,37 @@ describe("ConfigRegistry", () => {
     ).toThrow(ConfigError);
   });
 
+  it("accepts video config with plcmt + maxduration (#20)", () => {
+    const registry = new ConfigRegistry();
+    const result = registry.register("slot_video_plcmt", {
+      mediaTypes: { video: { context: "outstream", plcmt: 4, maxduration: 30 } },
+      bidders: [{ bidder: "pubmatic", params: {} }],
+      eager: true,
+    });
+    expect(result.mediaTypes.video?.plcmt).toBe(4);
+    expect(result.mediaTypes.video?.maxduration).toBe(30);
+  });
+
+  it("rejects video config with out-of-range plcmt (#20)", () => {
+    const registry = new ConfigRegistry();
+    expect(() =>
+      registry.register("slot_bad_plcmt", {
+        mediaTypes: { video: { plcmt: 5 } },
+        bidders: [{ bidder: "pubmatic", params: {} }],
+      }),
+    ).toThrow(ConfigError);
+  });
+
+  it("rejects video config with non-positive maxduration (#20)", () => {
+    const registry = new ConfigRegistry();
+    expect(() =>
+      registry.register("slot_bad_maxduration", {
+        mediaTypes: { video: { maxduration: 0 } },
+        bidders: [{ bidder: "pubmatic", params: {} }],
+      }),
+    ).toThrow(ConfigError);
+  });
+
   it("accepts mixed banner + video on the same slot", () => {
     const registry = new ConfigRegistry();
     const result = registry.register("slot_mixed", {

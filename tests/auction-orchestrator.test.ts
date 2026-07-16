@@ -155,6 +155,83 @@ describe("AuctionOrchestrator — batched auction", () => {
     expect(units[0]?.mediaTypes.banner.sizes).toEqual([[728, 90]]);
   });
 
+  it("attaches the inert outstream renderer stub to a video adUnit (D67/ADR-0009)", () => {
+    const pbjs = makeStubPbjs();
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const orchestrator = new AuctionOrchestrator(pbjs);
+
+    const registry = new ConfigRegistry();
+    const config = registry.register("slot_video", {
+      mediaTypes: { video: { context: "outstream", linearity: 1 } },
+      bidders: [{ bidder: "pubmatic", params: {} }],
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const renderer = new BannerRenderer(pbjs, callbacks);
+    const lifecycle = new SlotLifecycle({
+      slotId: "slot_video",
+      config,
+      container,
+      callbacks,
+      bannerRenderer: renderer,
+      pbjs,
+    });
+
+    orchestrator.enqueue({ slotId: "slot_video", config, lifecycle });
+    jest.advanceTimersByTime(50);
+
+    const units = pbjs.addAdUnits.mock.calls[0]?.[0] as Array<{
+      renderer?: { render: () => void };
+    }>;
+    expect(units[0]?.renderer).toBeDefined();
+    expect(typeof units[0]?.renderer?.render).toBe("function");
+  });
+
+  it("omits the renderer field entirely for a banner-only adUnit", () => {
+    const pbjs = makeStubPbjs();
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const orchestrator = new AuctionOrchestrator(pbjs);
+    const { config, lifecycle } = makeSlot("slot_banner_only", callbacks, pbjs);
+
+    orchestrator.enqueue({ slotId: "slot_banner_only", config, lifecycle });
+    jest.advanceTimersByTime(50);
+
+    const units = pbjs.addAdUnits.mock.calls[0]?.[0] as Array<{ renderer?: unknown }>;
+    expect(units[0]?.renderer).toBeUndefined();
+  });
+
+  it("forwards plcmt + maxduration on a video adUnit (#20)", () => {
+    const pbjs = makeStubPbjs();
+    const callbacks = new CallbackRegistry(new ErrorRegistry());
+    const orchestrator = new AuctionOrchestrator(pbjs);
+
+    const registry = new ConfigRegistry();
+    const config = registry.register("slot_video_plcmt", {
+      mediaTypes: { video: { context: "outstream", linearity: 1, plcmt: 4, maxduration: 30 } },
+      bidders: [{ bidder: "pubmatic", params: {} }],
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const renderer = new BannerRenderer(pbjs, callbacks);
+    const lifecycle = new SlotLifecycle({
+      slotId: "slot_video_plcmt",
+      config,
+      container,
+      callbacks,
+      bannerRenderer: renderer,
+      pbjs,
+    });
+
+    orchestrator.enqueue({ slotId: "slot_video_plcmt", config, lifecycle });
+    jest.advanceTimersByTime(50);
+
+    const units = pbjs.addAdUnits.mock.calls[0]?.[0] as Array<{
+      mediaTypes: { video: { plcmt?: number; maxduration?: number } };
+    }>;
+    expect(units[0]?.mediaTypes.video.plcmt).toBe(4);
+    expect(units[0]?.mediaTypes.video.maxduration).toBe(30);
+  });
+
   it("dispatches each slot's own winner; no-bid slots take the noFill path", () => {
     const pbjs = makeStubPbjs();
     pbjs.getHighestCpmBids = jest.fn((code: string) => {

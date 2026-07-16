@@ -1005,3 +1005,26 @@ Refactor highlights:
 ### Blocked by
 
 - #1
+
+---
+
+## #20 — Video mediaType schema gap: `plcmt` + `maxduration`
+
+**Type**: AFK
+**Status**: COMPLETE — `plcmt` (enum 1-4) + `maxduration` (positive number) added to `VideoMediaType`, validated in `ConfigRegistry`, forwarded in `AuctionOrchestrator`. 4 new tests (3 in `config-registry.test.ts`: accept both fields, reject out-of-range `plcmt`, reject non-positive `maxduration`; 1 in `auction-orchestrator.test.ts`: both fields present on the adUnit passed to `pbjs.addAdUnits`). 317 Jest tests / 57 suites all green, typecheck clean. Discovered incidentally while fixing the outstream-renderer forwarding gap (D67/ADR-0009); tracked separately since the root cause differs (schema omission, not a forwarding omission).
+**User stories covered**: 39, 40 (video, same as #9)
+
+### What to build
+
+`VideoMediaType` (`src/core/config-registry.ts:39-52`) is missing two OpenRTB video fields that SSPs use for outstream pricing/eligibility: `plcmt` (placement type, IAB OTT/video taxonomy) and `maxduration` (max creative duration in seconds). Both are silently stripped by `validateVideoMediaType` today — a publisher who sets `mediaTypes.video.plcmt` or `.maxduration` in `AdWrapperConfig` gets no error and no forwarding; the fields simply never reach the outgoing bid request. Add both as optional validated fields to `VideoMediaType` and forward them in the `mediaTypes.video` block built by `AuctionOrchestrator.runBatch` (`src/core/auction-orchestrator.ts:119-132`), alongside the existing `playerSize`/`mimes`/`protocols`/etc. fields.
+
+### Acceptance criteria
+
+- [x] `ConfigRegistry` accepts `mediaTypes.video.plcmt` (validated against the IAB enum: `1`–`4`) and forwards it into the adUnit's `mediaTypes.video.plcmt`.
+- [x] `ConfigRegistry` accepts `mediaTypes.video.maxduration` (validated as a positive number) and forwards it into `mediaTypes.video.maxduration`.
+- [x] Omitting either field continues to work exactly as today (both stay optional; no default value silently injected). _Both remain `...(condition ? {field} : {})` spreads throughout — absent when unset._
+- [x] Unit tests: `config-registry.test.ts` (accept valid / reject malformed `plcmt` and `maxduration`) + `auction-orchestrator.test.ts` (both fields present in the adUnit passed to `pbjs.addAdUnits` when configured).
+
+### Blocked by
+
+- #9

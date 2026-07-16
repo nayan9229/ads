@@ -46,6 +46,8 @@ export interface VideoMediaType {
   readonly skip?: 0 | 1;
   readonly delivery?: ReadonlyArray<number>;
   readonly linearity: 1 | 2;
+  readonly plcmt?: 1 | 2 | 3 | 4;
+  readonly maxduration?: number;
   readonly vastTimeoutMs?: number;
   readonly allowSkip?: boolean;
   readonly refresh?: RefreshConfig;
@@ -351,6 +353,20 @@ function validateVideoMediaType(raw: unknown, slotId: string, minSec?: number): 
       value: v.allowSkip,
     });
   }
+  if (v.plcmt !== undefined && v.plcmt !== 1 && v.plcmt !== 2 && v.plcmt !== 3 && v.plcmt !== 4) {
+    throw new ConfigError("`mediaTypes.video.plcmt` must be 1, 2, 3, or 4", {
+      slotId,
+      field: "mediaTypes.video.plcmt",
+      value: v.plcmt,
+    });
+  }
+  if (v.maxduration !== undefined && (typeof v.maxduration !== "number" || v.maxduration <= 0)) {
+    throw new ConfigError("`mediaTypes.video.maxduration` must be a positive number", {
+      slotId,
+      field: "mediaTypes.video.maxduration",
+      value: v.maxduration,
+    });
+  }
   const refresh = validateRefresh(v.refresh, slotId, minSec, "mediaTypes.video.refresh", {
     eventDriven: true,
   });
@@ -372,6 +388,8 @@ function validateVideoMediaType(raw: unknown, slotId: string, minSec?: number): 
       ? { delivery: Object.freeze([...(v.delivery as number[])]) }
       : {}),
     linearity: v.linearity === 2 ? 2 : 1,
+    ...(v.plcmt === 1 || v.plcmt === 2 || v.plcmt === 3 || v.plcmt === 4 ? { plcmt: v.plcmt } : {}),
+    ...(typeof v.maxduration === "number" ? { maxduration: v.maxduration } : {}),
     ...(typeof v.vastTimeoutMs === "number" ? { vastTimeoutMs: v.vastTimeoutMs } : {}),
     ...(typeof v.allowSkip === "boolean" ? { allowSkip: v.allowSkip } : {}),
     ...(refresh ? { refresh } : {}),
@@ -461,7 +479,9 @@ export class ConfigRegistry {
       ...(fallback ? { fallback } : {}),
       ...(typeof r.eager === "boolean" ? { eager: r.eager } : {}),
       ...(typeof r.container === "string" ? { container: r.container } : {}),
-      ...(typeof r.adCompleteDelayMs === "number" ? { adCompleteDelayMs: r.adCompleteDelayMs } : {}),
+      ...(typeof r.adCompleteDelayMs === "number"
+        ? { adCompleteDelayMs: r.adCompleteDelayMs }
+        : {}),
     });
     this.store.set(slotId, validated);
     return validated;
